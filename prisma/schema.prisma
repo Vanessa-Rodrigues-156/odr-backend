@@ -1,0 +1,223 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  INNOVATOR
+  MENTOR
+  ADMIN
+  OTHER
+}
+
+model User {
+  id               String   @id @default(uuid())
+  name             String
+  email            String   @unique
+  password         String
+  contactNumber    String?
+  city             String?
+  country          String?
+  userRole         UserRole @default(INNOVATOR)
+  institution      String?
+  highestEducation String?
+  odrLabUsage      String? // How are you gonna use ODRLab?
+  createdAt        DateTime @default(now())
+
+  // Relationships
+  ownedIdeas         Idea[]             @relation("IdeaOwner")
+  collaboratingIdeas IdeaCollaborator[]
+  mentoringIdeas     IdeaMentor[]
+  comments           Comment[]
+  likes              Like[]
+
+  // Meeting relationships
+  createdMeetings       MeetingLog[]         @relation("MeetingCreator")
+  meetingParticipations MeetingParticipant[]
+  meetingNotes          MeetingNote[]
+  editedNotes           MeetingNote[]        @relation("NoteEditor")
+  IdeaSubmission        IdeaSubmission[]
+}
+
+model Idea {
+  id                 String  @id @default(uuid())
+  title              String
+  caption            String?
+  description        String  @db.Text
+  priorOdrExperience String? @db.Text
+
+  // Status
+  approved   Boolean   @default(false)
+  reviewedAt DateTime?
+  reviewedBy String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Owner relationship
+  ownerId String
+  owner   User   @relation("IdeaOwner", fields: [ownerId], references: [id])
+
+  // Many-to-Many relationships 
+  collaborators IdeaCollaborator[]
+  mentors       IdeaMentor[]
+
+  // Engagement metrics
+  views Int @default(0)
+
+  // Related content
+  comments Comment[]
+  likes    Like[]
+  meetings MeetingLog[]
+}
+
+// Junction table for idea collaborators (many-to-many)
+model IdeaCollaborator {
+  user     User     @relation(fields: [userId], references: [id])
+  userId   String
+  idea     Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  ideaId   String
+  joinedAt DateTime @default(now())
+
+  @@id([userId, ideaId])
+}
+
+// Junction table for idea mentors (many-to-many)
+model IdeaMentor {
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  idea       Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  ideaId     String
+  assignedAt DateTime @default(now())
+
+  @@id([userId, ideaId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  createdAt DateTime @default(now())
+
+  // Relations
+  ideaId String
+  idea   Idea   @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // For threaded/nested comments
+  parentId String?
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentReplies")
+
+  // Likes for this comment are tracked in the Like model
+  likes Like[] @relation("CommentLikes")
+}
+
+// Separate model for tracking likes
+model Like {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  // User who liked
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // What was liked (either an Idea or a Comment, but not both)
+  ideaId String?
+  idea   Idea?   @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+
+  commentId String?
+  comment   Comment? @relation("CommentLikes", fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ideaId])
+  @@unique([userId, commentId])
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model MeetingLog {
+  id            String        @id @default(uuid())
+  title         String
+  startTime     DateTime
+  endTime       DateTime?
+  recordingUrl  String?       @db.Text
+  summary       String?       @db.Text
+  status        MeetingStatus @default(SCHEDULED)
+  jitsiRoomName String        @unique // Store the Jitsi room name for integration
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  ideaId String
+  idea   Idea   @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation("MeetingCreator", fields: [createdById], references: [id])
+
+  participants MeetingParticipant[]
+  notes        MeetingNote[]
+}
+
+model MeetingParticipant {
+  id          String     @id @default(uuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id])
+  meetingId   String
+  meeting     MeetingLog @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  joinTime    DateTime?
+  leaveTime   DateTime?
+  isPresenter Boolean    @default(false)
+
+  @@unique([userId, meetingId])
+}
+
+model MeetingNote {
+  id        String   @id @default(uuid())
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  meetingId String
+  meeting   MeetingLog @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  // For collaborative editing tracking
+  lastEditedById String?
+  lastEditedBy   User?   @relation("NoteEditor", fields: [lastEditedById], references: [id])
+}
+
+model IdeaSubmission {
+  id                 String   @id @default(uuid())
+  title              String
+  caption            String?
+  description        String   @db.Text
+  priorOdrExperience String?  @db.Text
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Owner relationship
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id])
+
+  // Status
+  reviewed        Boolean   @default(false)
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  approved        Boolean   @default(false)
+  rejected        Boolean   @default(false)
+  rejectionReason String?
+}
