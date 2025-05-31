@@ -11,20 +11,17 @@ import discussionRoutes from "./api/discussion";
 import adminRoutes from "./api/admin";
 import collaborationRoutes from "./api/collaboration";
 import chatbotRoutes from "./api/chat";
+import mentorsRoutes from "./api/mentors";
 
 const app = express();
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Remove trailing slash if present
-      if (origin) {
-        const cleanOrigin = origin.replace(/\/$/, "");
-        callback(null, cleanOrigin === "http://localhost:3000" ? cleanOrigin : false);
-      } else {
-        callback(null, false);
-      }
-    },
+    origin: ["http://13.53.145.44:3000", "http://odrlab.com","https://odrlab.com", "http://localhost:3000"],
+    // Allow all methods and headers for simplicity, adjust as needed
+    // For production, you might want to restrict methods and headers
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
 );
@@ -39,7 +36,8 @@ app.use("/api/odrlabs", authenticateJWT, odrlabsRoutes);
 app.use("/api/discussion", authenticateJWT, discussionRoutes);
 app.use("/api/submit-idea", authenticateJWT, submitIdeaRoutes);
 app.use("/api/admin", authenticateJWT, adminRoutes);
-app.use("/api/collaboration", authenticateJWT, collaborationRoutes); // Add the new route
+app.use("/api/collaboration", authenticateJWT, collaborationRoutes);
+app.use("/api/mentors", authenticateJWT, mentorsRoutes);
 
 app.use(errorHandler);
 
