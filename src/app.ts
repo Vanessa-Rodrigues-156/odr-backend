@@ -17,7 +17,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "*", // Allow all origins
+    origin: "https://www.odrlab.com", // Allow all origins
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -25,6 +25,7 @@ app.use(
 );
 // Explicitly handle preflight OPTIONS requests for all routes
 app.options("*", cors());
+
 app.use(express.json());
 
 app.use("/api/chatbot", chatbotRoutes);
