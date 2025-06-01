@@ -23,6 +23,8 @@ app.use(
     credentials: true,
   })
 );
+// Explicitly handle preflight OPTIONS requests for all routes
+app.options("*", cors());
 app.use(express.json());
 
 app.use("/api/chatbot", chatbotRoutes);
