@@ -17,9 +17,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: ["http://13.53.145.44:3000/","https://www.odrlab.com/signin","https://www.odrlab.com/signup","https://www.odrlab.com/","https://odrlab.com/",  "http://localhost:3000/"],
-    // Allow all methods and headers for simplicity, adjust as needed
-    // For production, you might want to restrict methods and headers
+    origin: "*", // Allow all origins
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
