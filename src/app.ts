@@ -17,7 +17,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "https://www.odrlab.com", // Allow all origins
+    origin: ["https://odrlab.com", "https://www.odrlab.com"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -29,7 +29,10 @@ app.options("*", cors());
 // Manual fallback for OPTIONS requests (for maximum compatibility)
 app.use((req, res, next) => {
   if (req.method === "OPTIONS") {
-    res.header("Access-Control-Allow-Origin", "https://www.odrlab.com");
+    const origin = req.headers.origin;
+    if (origin === "https://odrlab.com" || origin === "https://www.odrlab.com") {
+      res.header("Access-Control-Allow-Origin", origin);
+    }
     res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE");
     res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     res.header("Access-Control-Allow-Credentials", "true");
