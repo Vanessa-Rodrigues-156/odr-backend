@@ -8,7 +8,7 @@ const auth_1 = require("../../middleware/auth");
 const prisma_1 = __importDefault(require("../../lib/prisma"));
 const router = (0, express_1.Router)();
 router.use(auth_1.authenticateJWT);
-// GET /odrlabs/ideas - List all approved ideas for ODR Labs page
+// GET /odrlabs/ideas - List all approved ideas for ODR Lab page
 router.get("/ideas", async (req, res) => {
     try {
         const ideas = await prisma_1.default.idea.findMany({

@@ -14,24 +14,20 @@ const odrlabs_1 = __importDefault(require("./api/odrlabs"));
 const submit_idea_1 = __importDefault(require("./api/submit-idea"));
 const discussion_1 = __importDefault(require("./api/discussion"));
 const admin_1 = __importDefault(require("./api/admin"));
-const chatbot_1 = __importDefault(require("./api/chatbot"));
 const collaboration_1 = __importDefault(require("./api/collaboration"));
+const chat_1 = __importDefault(require("./api/chat"));
+const mentors_1 = __importDefault(require("./api/mentors"));
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
-    origin: (origin, callback) => {
-        // Remove trailing slash if present
-        if (origin) {
-            const cleanOrigin = origin.replace(/\/$/, "");
-            callback(null, cleanOrigin === "http://localhost:3000" ? cleanOrigin : false);
-        }
-        else {
-            callback(null, false);
-        }
-    },
+    origin: ["http://13.53.145.44:3000", "http://odrlab.com", "https://odrlab.com", "http://localhost:3000"],
+    // Allow all methods and headers for simplicity, adjust as needed
+    // For production, you might want to restrict methods and headers
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
 }));
 app.use(express_1.default.json());
-app.use("/api/chatbot", chatbot_1.default);
+app.use("/api/chatbot", chat_1.default);
 app.use("/api/auth", auth_1.default);
 app.use("/api/ideas", auth_2.authenticateJWT, ideas_1.default);
 app.use("/api/meetings", auth_2.authenticateJWT, meetings_1.default);
@@ -40,6 +36,7 @@ app.use("/api/odrlabs", auth_2.authenticateJWT, odrlabs_1.default);
 app.use("/api/discussion", auth_2.authenticateJWT, discussion_1.default);
 app.use("/api/submit-idea", auth_2.authenticateJWT, submit_idea_1.default);
 app.use("/api/admin", auth_2.authenticateJWT, admin_1.default);
-app.use("/api/collaboration", auth_2.authenticateJWT, collaboration_1.default); // Add the new route
+app.use("/api/collaboration", auth_2.authenticateJWT, collaboration_1.default);
+app.use("/api/mentors", auth_2.authenticateJWT, mentors_1.default);
 app.use(errorHandler_1.default);
 exports.default = app;

@@ -5,7 +5,7 @@ import prisma from "../../lib/prisma";
 const router = Router();
 router.use(authenticateJWT);
 
-// GET /odrlabs/ideas - List all approved ideas for ODR Labs page
+// GET /odrlabs/ideas - List all approved ideas for ODR Lab page
 router.get("/ideas", async (req, res) => {
   try {
     const ideas = await prisma.idea.findMany({
