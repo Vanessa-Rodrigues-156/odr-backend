@@ -24,7 +24,7 @@ app.use(
   })
 );
 // Explicitly handle preflight OPTIONS requests for all routes
-app.options("*", cors());
+app.options("https://www.odrlab.com", cors());
 
 app.use(express.json());
 
