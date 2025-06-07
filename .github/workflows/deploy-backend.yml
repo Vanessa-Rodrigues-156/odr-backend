@@ -62,6 +62,14 @@ jobs:
         username: ec2-user
         key: ${{ secrets.EC2_BACKEND_KEY }}
         script: |
+          set -e
+          # Install Node.js (required for pm2 and other tools)
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo yum install -y nodejs
+          # Install PM2 globally
+          sudo npm install -g pm2
+          # Install Bun globally
+          curl -fsSL https://bun.sh/install | bash
           export PATH="$HOME/.bun/bin:$PATH"
           cd /home/ec2-user
           rm -rf odr-backend
