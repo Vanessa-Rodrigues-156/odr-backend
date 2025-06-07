@@ -3,3 +3,5 @@
 
 /.cache
 /.next
+.env.development
+.env.production

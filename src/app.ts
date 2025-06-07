@@ -17,7 +17,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: ["https://odrlab.com", "https://www.odrlab.com"],
+    origin: ["https://odrlab.com", "https://www.odrlab.com", "http://localhost:3000"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -43,7 +43,7 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-app.use("/api/chatbot", chatbotRoutes);
+app.use("/api/chat", chatbotRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/ideas", authenticateJWT, ideasRoutes);
 app.use("/api/meetings", authenticateJWT, meetingsRoutes);
