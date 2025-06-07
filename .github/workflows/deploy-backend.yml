@@ -30,6 +30,12 @@ jobs:
       run: |
         bun run tsc
 
+    - name: Verify build files
+      run: |
+        ls -la
+        ls -la dist/ || echo "dist directory not found"
+        ls -la prisma/ || echo "prisma directory not found"
+
     - name: Upload files to EC2
       uses: appleboy/scp-action@v0.1.7
       with:
@@ -37,11 +43,10 @@ jobs:
         username: ec2-user
         key: ${{ secrets.EC2_BACKEND_KEY }}
         source: |
-          dist/
-          .env
+          dist/*
           package.json
           bun.lockb
-          prisma/
+          prisma/schema.prisma
         target: /home/ec2-user/odr-backend
 
     - name: Restart PM2 on EC2
