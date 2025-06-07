@@ -16,15 +16,14 @@ jobs:
     - name: Install Bun
       run: |
         curl -fsSL https://bun.sh/install | bash
-        echo 'export PATH="$HOME/.bun/bin:$PATH"' >> $GITHUB_ENV
-        source ~/.bashrc
+        echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
-    - name: Build project
+    - name: Install Dependencies & Build
       run: |
         bun install
         bun run tsc
 
-    - name: Upload to EC2 backend
+    - name: Upload files to EC2
       uses: appleboy/scp-action@v0.1.7
       with:
         host: 13.233.201.37
@@ -32,11 +31,12 @@ jobs:
         key: ${{ secrets.EC2_BACKEND_KEY }}
         source: |
           dist/
-          package.json
           .env
+          package.json
+          bun.lockb
         target: /home/ec2-user/odr-backend
 
-    - name: Restart PM2
+    - name: Restart PM2 on EC2
       uses: appleboy/ssh-action@v1.0.0
       with:
         host: 13.233.201.37
@@ -45,7 +45,7 @@ jobs:
         script: |
           export PATH="/home/ec2-user/.bun/bin:$PATH"
           cd /home/ec2-user/odr-backend
-          bun install
+          bun install --no-save
           pm2 delete all || true
           pm2 start dist/server.js --name odr-backend
           pm2 save
