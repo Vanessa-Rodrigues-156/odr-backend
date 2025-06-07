@@ -13,6 +13,9 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    - name: Write .env from GitHub Secret
+      run: echo "${{ secrets.ENV_FILE }}" > .env
+
     - name: Install Bun
       run: |
         curl -fsSL https://bun.sh/install | bash
@@ -32,9 +35,9 @@ jobs:
 
     - name: Verify build files
       run: |
-        ls -la
-        ls -la dist/ || echo "dist directory not found"
-        ls -la prisma/ || echo "prisma directory not found"
+        echo "Root contents:" && ls -la
+        echo "dist contents:" && ls -la dist || echo "dist missing"
+        echo "prisma contents:" && ls -la prisma || echo "prisma missing"
 
     - name: Upload files to EC2
       uses: appleboy/scp-action@v0.1.7
@@ -43,10 +46,11 @@ jobs:
         username: ec2-user
         key: ${{ secrets.EC2_BACKEND_KEY }}
         source: |
-          dist/*
+          dist/
+          .env
           package.json
           bun.lockb
-          prisma/schema.prisma
+          prisma/
         target: /home/ec2-user/odr-backend
 
     - name: Restart PM2 on EC2
