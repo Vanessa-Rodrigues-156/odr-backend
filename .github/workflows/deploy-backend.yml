@@ -1,0 +1,51 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install Bun
+      run: |
+        curl -fsSL https://bun.sh/install | bash
+        echo 'export PATH="$HOME/.bun/bin:$PATH"' >> $GITHUB_ENV
+        source ~/.bashrc
+
+    - name: Build project
+      run: |
+        bun install
+        bun run tsc
+
+    - name: Upload to EC2 backend
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: 13.233.201.37
+        username: ec2-user
+        key: ${{ secrets.EC2_BACKEND_KEY }}
+        source: |
+          dist/
+          package.json
+          .env
+        target: /home/ec2-user/odr-backend
+
+    - name: Restart PM2
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: 13.233.201.37
+        username: ec2-user
+        key: ${{ secrets.EC2_BACKEND_KEY }}
+        script: |
+          export PATH="/home/ec2-user/.bun/bin:$PATH"
+          cd /home/ec2-user/odr-backend
+          bun install
+          pm2 delete all || true
+          pm2 start dist/server.js --name odr-backend
+          pm2 save
