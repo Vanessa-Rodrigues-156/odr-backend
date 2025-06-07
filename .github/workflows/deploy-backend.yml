@@ -43,7 +43,7 @@ jobs:
       run: |
         mkdir deploy
         cp -r dist prisma deploy/
-        cp .env package.json bun.lockb deploy/
+        cp .env package.json bun.lock deploy/
         tar -czf backend.tar.gz -C deploy .
 
     - name: 🚀 Upload to EC2
