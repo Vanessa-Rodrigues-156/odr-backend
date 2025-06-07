@@ -18,9 +18,16 @@ jobs:
         curl -fsSL https://bun.sh/install | bash
         echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
-    - name: Install Dependencies & Build
+    - name: Install Dependencies
       run: |
         bun install
+
+    - name: Generate Prisma Client
+      run: |
+        bunx prisma generate
+
+    - name: Build TypeScript
+      run: |
         bun run tsc
 
     - name: Upload files to EC2
@@ -34,6 +41,7 @@ jobs:
           .env
           package.json
           bun.lockb
+          prisma/
         target: /home/ec2-user/odr-backend
 
     - name: Restart PM2 on EC2
@@ -46,6 +54,7 @@ jobs:
           export PATH="/home/ec2-user/.bun/bin:$PATH"
           cd /home/ec2-user/odr-backend
           bun install --no-save
+          bunx prisma generate
           pm2 delete all || true
           pm2 start dist/server.js --name odr-backend
           pm2 save
