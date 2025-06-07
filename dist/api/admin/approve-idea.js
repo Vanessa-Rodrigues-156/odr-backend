@@ -38,7 +38,7 @@ router.get("/", async (req, res) => {
             orderBy: { createdAt: "desc" },
         });
         // Map submissions to match the expected frontend format
-        const formattedSubmissions = submissions.map(submission => ({
+        const formattedSubmissions = submissions.map((submission) => ({
             id: submission.id,
             title: submission.title,
             ideaCaption: submission.caption || "",

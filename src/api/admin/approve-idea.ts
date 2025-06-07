@@ -37,7 +37,7 @@ router.get("/", async (req: AuthRequest, res) => {
     });
 
     // Map submissions to match the expected frontend format
-    const formattedSubmissions = submissions.map(submission => ({
+    const formattedSubmissions = submissions.map((submission: any) => ({
       id: submission.id,
       title: submission.title,
       ideaCaption: submission.caption || "",

@@ -24,7 +24,7 @@ router.get("/ideas", async (req, res) => {
       },
     });
 
-    const result = ideas.map((idea) => ({
+    const result = ideas.map((idea: any) => ({
       id: idea.id,
       name: idea.owner?.name || "Anonymous",
       email: idea.owner?.email || "",

@@ -80,7 +80,7 @@ authenticatedRouter.get("/:ideaId/comments/likes", async (req: AuthRequest, res)
     where: { userId, comment: { ideaId } },
     select: { commentId: true },
   });
-  res.json({ likedCommentIds: likedComments.map((lc) => lc.commentId) });
+  res.json({ likedCommentIds: likedComments.map((lc: any) => lc.commentId) });
 });
 
 // Mount authenticated router on the main router

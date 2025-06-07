@@ -175,7 +175,7 @@ router.get("/approved", async (req, res) => {
             orderBy: { createdAt: "desc" },
         });
         // Map to frontend format
-        const mapped = ideas.map(idea => ({
+        const mapped = ideas.map((idea) => ({
             id: idea.id,
             name: idea.owner?.name || "Anonymous",
             email: idea.owner?.email || "anonymous@example.com",

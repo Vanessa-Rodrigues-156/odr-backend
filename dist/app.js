@@ -19,13 +19,27 @@ const chat_1 = __importDefault(require("./api/chat"));
 const mentors_1 = __importDefault(require("./api/mentors"));
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
-    origin: ["http://13.53.145.44:3000", "http://odrlab.com", "https://odrlab.com", "http://localhost:3000"],
-    // Allow all methods and headers for simplicity, adjust as needed
-    // For production, you might want to restrict methods and headers
+    origin: ["https://odrlab.com", "https://www.odrlab.com"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
 }));
+// Explicitly handle preflight OPTIONS requests for all routes
+app.options("*", (0, cors_1.default)());
+// Manual fallback for OPTIONS requests (for maximum compatibility)
+app.use((req, res, next) => {
+    if (req.method === "OPTIONS") {
+        const origin = req.headers.origin;
+        if (origin === "https://odrlab.com" || origin === "https://www.odrlab.com") {
+            res.header("Access-Control-Allow-Origin", origin);
+        }
+        res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE");
+        res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        res.header("Access-Control-Allow-Credentials", "true");
+        return res.sendStatus(200);
+    }
+    next();
+});
 app.use(express_1.default.json());
 app.use("/api/chatbot", chat_1.default);
 app.use("/api/auth", auth_1.default);
