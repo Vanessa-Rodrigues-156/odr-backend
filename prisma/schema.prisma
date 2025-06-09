@@ -19,7 +19,7 @@ model User {
   id               String   @id @default(uuid())
   name             String
   email            String   @unique
-  password         String
+  password         String?
   contactNumber    String?
   city             String?
   country          String?
@@ -28,7 +28,7 @@ model User {
   highestEducation String?
   odrLabUsage      String? // How are you gonna use ODRLab?
   createdAt        DateTime @default(now())
-
+  imageAvatar      String?
   // Relationships
   ownedIdeas         Idea[]             @relation("IdeaOwner")
   collaboratingIdeas IdeaCollaborator[]

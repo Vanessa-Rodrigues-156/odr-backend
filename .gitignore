@@ -5,3 +5,4 @@
 /.next
 .env.development
 .env.production
+.env
