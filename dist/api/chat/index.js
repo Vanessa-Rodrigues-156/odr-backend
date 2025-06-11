@@ -1,40 +1,50 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const axios_1 = __importDefault(require("axios"));
+const chatOptimizer_1 = require("../../utils/chatOptimizer");
 const router = (0, express_1.Router)();
-// Chat with AI endpoint
-router.post("/message", async (req, res) => {
+// Initialize chat optimizer
+const chatOptimizer = new chatOptimizer_1.ChatOptimizer(process.env.TOGETHER_API_KEY || "");
+// Store conversation history per session (in production, use Redis or database)
+const sessionHistory = new Map();
+// Chat endpoint with optimization
+router.post("/", async (req, res) => {
     try {
-        const { message } = req.body;
+        const { message, sessionId, detail = false } = req.body;
         if (!message || typeof message !== 'string') {
             return res.status(400).json({ error: "Message is required" });
         }
-        // Call the Mistral API via Hugging Face Space
-        const response = await axios_1.default.post('https://huggingface.co/spaces/hysts/mistral-7b/api/predict', {
-            data: [
-                message, // user message
-                1024, // max_tokens
-                0.6, // temperature
-                0.9, // top_p
-                50, // top_k
-                1.2 // repetition_penalty
-            ],
-            fn_index: 0 // This corresponds to the "/chat" endpoint
-        }, {
-            headers: {
-                'Content-Type': 'application/json',
-            }
+        // Generate session ID if not provided
+        const currentSessionId = sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        // Get or create session history
+        let history = sessionHistory.get(currentSessionId) || [];
+        // Optimize chat with token-saving strategies
+        const optimizedResponse = await chatOptimizer.optimizeChat(history, detail ? `Please provide detailed explanation: ${message}` : message, {
+            maxHistory: 3, // Keep last 3 message pairs
+            maxTokens: detail ? 300 : 150, // Limit response length
+            useDetailedResponse: detail,
+            modelType: detail ? 'standard' : 'light'
         });
-        // Extract the AI response
-        const aiResponse = response.data.data[0];
-        return res.json({ response: aiResponse });
+        // Update session history
+        history.push({ role: "user", content: message, timestamp: new Date().toISOString() }, { role: "assistant", content: optimizedResponse, timestamp: new Date().toISOString() });
+        // Keep only recent history to prevent memory bloat
+        if (history.length > 12) {
+            history = history.slice(-8); // Keep last 4 pairs
+        }
+        sessionHistory.set(currentSessionId, history);
+        return res.json({
+            response: optimizedResponse,
+            sessionId: currentSessionId,
+            canExpand: !detail && optimizedResponse.length < 200 // Show expand option for short responses
+        });
     }
     catch (error) {
-        console.error("Error in chat API:", error);
+        console.error("Together AI API error:", error);
+        if (error.status === 429) {
+            return res.status(429).json({
+                error: "Rate limit exceeded. Please try again later."
+            });
+        }
         return res.status(500).json({
             error: "Failed to get response from AI service",
             details: process.env.NODE_ENV !== 'production' ? String(error) : undefined

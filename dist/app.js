@@ -19,7 +19,7 @@ const chat_1 = __importDefault(require("./api/chat"));
 const mentors_1 = __importDefault(require("./api/mentors"));
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
-    origin: ["https://odrlab.com", "https://www.odrlab.com"],
+    origin: ["https://odrlab.com", "https://www.odrlab.com", "http://localhost:3000"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -41,7 +41,7 @@ app.use((req, res, next) => {
     next();
 });
 app.use(express_1.default.json());
-app.use("/api/chatbot", chat_1.default);
+app.use("/api/chat", chat_1.default);
 app.use("/api/auth", auth_1.default);
 app.use("/api/ideas", auth_2.authenticateJWT, ideas_1.default);
 app.use("/api/meetings", auth_2.authenticateJWT, meetings_1.default);
