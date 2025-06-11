@@ -21,7 +21,6 @@ app.use(
       "https://odrlab.com",
       "https://www.odrlab.com",
       "https://api.odrlab.com",
-      "https://www.api.odrlab.com",
       "http://localhost:3000",
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],

@@ -46,23 +46,30 @@ authenticatedRouter.post("/:ideaId/comments", async (req, res) => {
     res.status(201).json(comment);
 });
 // Like/unlike an idea - requires authentication
-authenticatedRouter.post("/:ideaId/like", async (req, res) => {
+authenticatedRouter.post("/:ideaId/likes", async (req, res) => {
     const { ideaId } = req.params;
-    const userId = req.user.id; // Non-null assertion since middleware guarantees this
-    const like = await prisma_1.default.like.findUnique({
-        where: { userId_ideaId: { userId, ideaId } },
-    });
-    if (like) {
-        await prisma_1.default.like.delete({ where: { userId_ideaId: { userId, ideaId } } });
+    const { action } = req.body; // 'like' or 'unlike'
+    const userId = req.user.id;
+    if (action === "like") {
+        const like = await prisma_1.default.like.upsert({
+            where: { userId_ideaId: { userId, ideaId } },
+            update: {},
+            create: { userId, ideaId },
+        });
+        return res.json({ liked: true });
+    }
+    else if (action === "unlike") {
+        await prisma_1.default.like.deleteMany({
+            where: { userId, ideaId },
+        });
         return res.json({ liked: false });
     }
     else {
-        await prisma_1.default.like.create({ data: { userId, ideaId } });
-        return res.json({ liked: true });
+        return res.status(400).json({ error: "Invalid action. Use 'like' or 'unlike'" });
     }
 });
 // Check if user liked the idea - requires authentication
-authenticatedRouter.get("/:ideaId/like/check", async (req, res) => {
+authenticatedRouter.get("/:ideaId/likes/check", async (req, res) => {
     const { ideaId } = req.params;
     const userId = req.user.id; // Non-null assertion since middleware guarantees this
     const like = await prisma_1.default.like.findUnique({
@@ -71,7 +78,7 @@ authenticatedRouter.get("/:ideaId/like/check", async (req, res) => {
     res.json({ hasLiked: !!like });
 });
 // Get liked comments for a user on an idea - requires authentication
-authenticatedRouter.get("/:ideaId/comments/likes", async (req, res) => {
+authenticatedRouter.get("/:ideaId/comments/liked", async (req, res) => {
     const { ideaId } = req.params;
     const userId = req.user.id; // Non-null assertion since middleware guarantees this
     const likedComments = await prisma_1.default.like.findMany({
@@ -79,6 +86,29 @@ authenticatedRouter.get("/:ideaId/comments/likes", async (req, res) => {
         select: { commentId: true },
     });
     res.json({ likedCommentIds: likedComments.map((lc) => lc.commentId) });
+});
+// Add route for liking/unliking a specific comment to match frontend
+authenticatedRouter.post("/:ideaId/comments/:commentId/likes", async (req, res) => {
+    const { ideaId, commentId } = req.params;
+    const { action } = req.body; // expect 'like' or 'unlike'
+    const userId = req.user.id;
+    if (action === "like") {
+        await prisma_1.default.like.upsert({
+            where: { userId_commentId: { userId, commentId } },
+            update: {},
+            create: { userId, commentId },
+        });
+        return res.json({ liked: true });
+    }
+    else if (action === "unlike") {
+        await prisma_1.default.like.deleteMany({
+            where: { userId, commentId },
+        });
+        return res.json({ liked: false });
+    }
+    else {
+        return res.status(400).json({ error: "Invalid action. Use 'like' or 'unlike'" });
+    }
 });
 // Mount authenticated router on the main router
 router.use("/", authenticatedRouter);

@@ -19,7 +19,12 @@ const chat_1 = __importDefault(require("./api/chat"));
 const mentors_1 = __importDefault(require("./api/mentors"));
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
-    origin: ["https://odrlab.com", "https://www.odrlab.com", "http://localhost:3000"],
+    origin: [
+        "https://odrlab.com",
+        "https://www.odrlab.com",
+        "https://api.odrlab.com",
+        "http://localhost:3000",
+    ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -30,7 +35,9 @@ app.options("*", (0, cors_1.default)());
 app.use((req, res, next) => {
     if (req.method === "OPTIONS") {
         const origin = req.headers.origin;
-        if (origin === "https://odrlab.com" || origin === "https://www.odrlab.com") {
+        if (origin === "https://odrlab.com" ||
+            origin === "https://www.odrlab.com" ||
+            origin === "https://api.odrlab.com") {
             res.header("Access-Control-Allow-Origin", origin);
         }
         res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE");

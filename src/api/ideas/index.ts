@@ -373,8 +373,8 @@ authenticatedRouter.post("/:id/comments", async (req: AuthRequest, res) => {
   res.status(201).json(comment);
 });
 
-// Like/unlike idea
-authenticatedRouter.post("/:id/like", async (req: AuthRequest, res) => {
+// Update like/unlike idea route to match frontend expectations
+authenticatedRouter.post("/:id/likes", async (req: AuthRequest, res) => {
   const { id } = req.params;
   const { action } = req.body; // 'like' or 'unlike'
   if (!["like", "unlike"].includes(action)) {
@@ -390,6 +390,63 @@ authenticatedRouter.post("/:id/like", async (req: AuthRequest, res) => {
   } else {
     await prisma.like.deleteMany({
       where: { userId: req.user!.id, ideaId: id },
+    });
+    return res.json({ liked: false });
+  }
+});
+
+// Add route to check if user has liked an idea
+router.get("/:id/likes/check", async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const userId = req.query.userId as string;
+  
+  if (!userId) {
+    return res.status(400).json({ error: "userId is required" });
+  }
+  
+  const like = await prisma.like.findUnique({
+    where: { userId_ideaId: { userId, ideaId: id } },
+  });
+  
+  res.json({ liked: !!like });
+});
+
+// Add route to get comments liked by a user
+router.get("/:id/comments/liked", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const userId = req.query.userId as string;
+  
+  if (!userId) {
+    return res.status(400).json({ error: "userId is required" });
+  }
+  
+  const likedComments = await prisma.like.findMany({
+    where: { userId, comment: { ideaId: id } },
+    select: { commentId: true },
+  });
+  
+  res.json({ likedComments: likedComments.map((lc) => lc.commentId) });
+});
+
+// Add route for liking/unliking a comment
+authenticatedRouter.post("/:id/comments/:commentId/likes", async (req: AuthRequest, res: Response) => {
+  const { id, commentId } = req.params;
+  const { action } = req.body;
+  
+  if (!["like", "unlike"].includes(action)) {
+    return res.status(400).json({ error: "Invalid action" });
+  }
+  
+  if (action === "like") {
+    await prisma.like.upsert({
+      where: { userId_commentId: { userId: req.user!.id, commentId } },
+      update: {},
+      create: { userId: req.user!.id, commentId },
+    });
+    return res.json({ liked: true });
+  } else {
+    await prisma.like.deleteMany({
+      where: { userId: req.user!.id, commentId },
     });
     return res.json({ liked: false });
   }
