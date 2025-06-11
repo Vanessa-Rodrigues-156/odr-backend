@@ -3,7 +3,7 @@ import prisma from "../../lib/prisma";
 
 export default async function checkGoogleUserHandler(req: Request, res: Response) {
   try {
-    const { email, name, image } = req.body; // Include image from Google
+    const { email, name } = req.body; // Exclude image as it's not stored
 
     if (!email || !name) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -15,14 +15,6 @@ export default async function checkGoogleUserHandler(req: Request, res: Response
     });
 
     if (existingUser) {
-      // User exists - update Google avatar if provided and not already set
-      if (image && !existingUser.imageAvatar) {
-        await prisma.user.update({
-          where: { email: email.toLowerCase().trim() },
-          data: { imageAvatar: image }
-        });
-      }
-      
       return res.json({
         isNewUser: false,
         user: existingUser,
@@ -34,7 +26,6 @@ export default async function checkGoogleUserHandler(req: Request, res: Response
         data: {
           name,
           email: email.toLowerCase().trim(),
-          imageAvatar: image || null, // Store Google profile image URL
           userRole: "INNOVATOR", // Default role
           password: null, // No password for Google users
         }

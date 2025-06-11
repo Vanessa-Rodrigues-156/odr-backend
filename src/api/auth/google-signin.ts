@@ -4,7 +4,7 @@ import prisma from "../../lib/prisma";
 
 export default async function googleSignInHandler(req: Request, res: Response) {
   try {
-    const { email, name, image } = req.body;
+    const { email, name } = req.body;
     
     if (!email || !name) {
       return res.status(400).json({ error: "Email and name are required" });
@@ -25,7 +25,6 @@ export default async function googleSignInHandler(req: Request, res: Response) {
         data: {
           email,
           name,
-          imageAvatar: image || null,
           userRole: "INNOVATOR", // Default role
         },
       });
@@ -71,7 +70,6 @@ export default async function googleSignInHandler(req: Request, res: Response) {
         highestEducation: user.highestEducation,
         odrLabUsage: user.odrLabUsage,
         createdAt: user.createdAt,
-        imageAvatar: user.imageAvatar,
       },
       needsProfileCompletion,
       token,
