@@ -452,6 +452,116 @@ authenticatedRouter.post("/:id/comments/:commentId/likes", async (req: AuthReque
   }
 });
 
+// Get team details for an idea (owner, collaborators, mentors)
+router.get("/:id/team", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  
+  try {
+    // Get idea with owner information
+    const idea = await prisma.idea.findUnique({
+      where: { id, approved: true },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            imageAvatar: true,
+            country: true,
+            institution: true,
+            city: true,
+          }
+        }
+      }
+    });
+    
+    if (!idea) {
+      return res.status(404).json({ error: "Idea not found or not approved" });
+    }
+    
+    // Get collaborators
+    const collaborators = await prisma.ideaCollaborator.findMany({
+      where: { ideaId: id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            imageAvatar: true,
+            country: true,
+            institution: true,
+            city: true,
+          }
+        }
+      }
+    });
+    
+    // Get mentors
+    const mentors = await prisma.ideaMentor.findMany({
+      where: { ideaId: id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            imageAvatar: true,
+            country: true,
+            institution: true,
+            city: true,
+          }
+        }
+      }
+    });
+    
+    // Format the owner data
+    const ownerData = {
+      id: idea.owner.id,
+      name: idea.owner.name,
+      email: idea.owner.email,
+      image: idea.owner.imageAvatar || '/placeholder-avatar.png',
+      description: `${idea.owner.institution || ''} ${idea.owner.country || ''}`.trim() || 'Project Owner',
+      role: 'owner'
+    };
+    
+    // Format collaborator data
+    const collaboratorsData = collaborators.map(collab => ({
+      id: collab.user.id,
+      name: collab.user.name,
+      email: collab.user.email,
+      image: collab.user.imageAvatar || '/placeholder-avatar.png',
+      description: `${collab.user.institution || ''} ${collab.user.country || ''}`.trim() || 'Team Member',
+      role: 'collaborator'
+    }));
+    
+    // Format mentor data (if any)
+    let mentorData = undefined;
+    if (mentors.length > 0) {
+      mentorData = {
+        id: mentors[0].user.id,
+        name: mentors[0].user.name,
+        email: mentors[0].user.email,
+        image: mentors[0].user.imageAvatar || '/placeholder-avatar.png',
+        description: `${mentors[0].user.institution || ''} ${mentors[0].user.country || ''}`.trim() || 'Project Mentor',
+        role: 'mentor'
+      };
+    }
+    
+    // Format the final response
+    const teamData = {
+      owner: ownerData,
+      mentor: mentorData,
+      collaborators: collaboratorsData
+    };
+    
+    res.json(teamData);
+  } catch (err) {
+    console.error("[Ideas] Error fetching team details:", err);
+    res.status(500).json({ error: "Failed to fetch team details" });
+  }
+});
+
 // Mount authenticated and admin routers on the main router
 router.use("/", authenticatedRouter);
 router.use("/", adminRouter);
