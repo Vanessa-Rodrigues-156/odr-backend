@@ -13,7 +13,13 @@ async function checkGoogleUserHandler(req, res) {
         }
         // Check if user already exists by email
         const existingUser = await prisma_1.default.user.findUnique({
-            where: { email: email.toLowerCase().trim() }
+            where: { email: email.toLowerCase().trim() },
+            include: {
+                innovator: true,
+                mentor: true,
+                faculty: true,
+                other: true
+            }
         });
         if (existingUser) {
             return res.json({
@@ -23,14 +29,23 @@ async function checkGoogleUserHandler(req, res) {
             });
         }
         else {
-            // Create basic user record for Google sign-up
-            const newUser = await prisma_1.default.user.create({
-                data: {
-                    name,
-                    email: email.toLowerCase().trim(),
-                    userRole: "INNOVATOR", // Default role
-                    password: null, // No password for Google users
-                }
+            // Create basic user record for Google sign-up with role-specific record
+            const newUser = await prisma_1.default.$transaction(async (prisma) => {
+                const user = await prisma.user.create({
+                    data: {
+                        name,
+                        email: email.toLowerCase().trim(),
+                        userRole: "INNOVATOR", // Default role
+                        password: null, // No password for Google users
+                    }
+                });
+                // Create corresponding Innovator record since default role is INNOVATOR
+                await prisma.innovator.create({
+                    data: {
+                        userId: user.id,
+                    }
+                });
+                return user;
             });
             return res.json({
                 isNewUser: true,

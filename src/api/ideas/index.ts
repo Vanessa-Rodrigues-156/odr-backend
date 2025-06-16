@@ -79,17 +79,18 @@ adminRouter.post("/submissions/:id/approve", async (req: AuthRequest, res) => {
   const submission = await prisma.ideaSubmission.findUnique({ where: { id } });
   if (!submission) return res.status(404).json({ error: "Submission not found" });
 
-  // Create Idea from submission
+  // Create Idea from submission (only using fields that exist in the Idea model)
   const idea = await prisma.idea.create({
     data: {
       title: submission.title,
       caption: submission.caption,
       description: submission.description,
-      priorOdrExperience: submission.priorOdrExperience,
       ownerId: submission.ownerId,
       approved: true,
-      reviewedAt: new Date(),
-      reviewedBy: req.user!.id, // Non-null assertion since middleware guarantees this
+      // Remove fields that don't exist in the Idea model
+      // priorOdrExperience: submission.priorOdrExperience,
+      // reviewedAt: new Date(),
+      // reviewedBy: req.user!.id,
     },
   });
 
@@ -135,7 +136,6 @@ adminRouter.get("/", async (req: AuthRequest, res) => {
       mentors: { include: { user: true } },
       comments: true,
       likes: true,
-      meetings: true,
     },
     orderBy: { createdAt: "desc" },
   });
@@ -144,7 +144,7 @@ adminRouter.get("/", async (req: AuthRequest, res) => {
 
 // Create a new idea (for admin only, normal users use /submit)
 adminRouter.post("/", async (req: AuthRequest, res) => {
-  const { title, caption, description, priorOdrExperience, ownerId } = req.body;
+  const { title, caption, description, ownerId } = req.body;
   if (!title || !description || !ownerId) {
     return res.status(400).json({ error: "Title, description, and ownerId are required." });
   }
@@ -154,11 +154,12 @@ adminRouter.post("/", async (req: AuthRequest, res) => {
         title,
         caption: caption || null,
         description,
-        priorOdrExperience: priorOdrExperience || null,
         ownerId,
         approved: true,
-        reviewedAt: new Date(),
-        reviewedBy: req.user!.id,
+        // Remove fields that don't exist in the Idea model
+        // priorOdrExperience: priorOdrExperience || null,
+        // reviewedAt: new Date(),
+        // reviewedBy: req.user!.id,
       },
       include: {
         owner: true,
@@ -219,9 +220,15 @@ router.get("/:id", async (req: Request, res: Response) => {
             email: true,
             userRole: true,
             country: true,
-            institution: true,
             city: true,
-            highestEducation: true,
+            // Include role-specific tables for additional fields
+            innovator: true,
+            mentor: true,
+            faculty: true,
+            other: true,
+            // Remove fields that don't exist in User model
+            // institution: true,
+            // highestEducation: true,
           }
         },
         collaborators: {
@@ -233,9 +240,15 @@ router.get("/:id", async (req: Request, res: Response) => {
                 email: true,
                 userRole: true,
                 country: true,
-                institution: true,
                 city: true,
-                highestEducation: true,
+                // Include role-specific tables for additional fields
+                innovator: true,
+                mentor: true,
+                faculty: true,
+                other: true,
+                // Remove fields that don't exist in User model
+                // institution: true,
+                // highestEducation: true,
               }
             }
           }
@@ -249,9 +262,15 @@ router.get("/:id", async (req: Request, res: Response) => {
                 email: true,
                 userRole: true,
                 country: true,
-                institution: true,
                 city: true,
-                highestEducation: true,
+                // Include role-specific tables for additional fields
+                innovator: true,
+                mentor: true,
+                faculty: true,
+                other: true,
+                // Remove fields that don't exist in User model
+                // institution: true,
+                // highestEducation: true,
               }
             }
           }
@@ -259,7 +278,7 @@ router.get("/:id", async (req: Request, res: Response) => {
         likes: true,
         comments: {
           include: {
-            user: true,
+            author: true, // Changed from user to author to match the schema
             likes: true,
           },
           orderBy: { createdAt: "asc" },
@@ -268,7 +287,22 @@ router.get("/:id", async (req: Request, res: Response) => {
     });
     if (!idea)
       return res.status(404).json({ error: "Idea not found or not approved" });
-    res.json(idea);
+      
+    // Process role-specific fields for owner and team members
+    const processedIdea = {
+      ...idea,
+      owner: processUserFields(idea.owner),
+      collaborators: idea.collaborators.map(collab => ({
+        ...collab,
+        user: processUserFields(collab.user)
+      })),
+      mentors: idea.mentors.map(mentor => ({
+        ...mentor,
+        user: processUserFields(mentor.user)
+      }))
+    };
+    
+    res.json(processedIdea);
   } catch (err) {
     console.error("[Ideas] Error fetching idea details:", err);
     res.status(500).json({ error: "Failed to fetch idea details" });
@@ -278,7 +312,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 // Update idea (owner only)
 authenticatedRouter.put("/:id", async (req: AuthRequest, res) => {
   const { id } = req.params;
-  const { title, caption, description, priorOdrExperience } = req.body;
+  const { title, caption, description } = req.body;
   const idea = await prisma.idea.findUnique({ where: { id } });
   if (!idea) return res.status(404).json({ error: "Idea not found" });
   if (idea.ownerId !== req.user!.id && req.user!.userRole !== "ADMIN") {
@@ -286,7 +320,7 @@ authenticatedRouter.put("/:id", async (req: AuthRequest, res) => {
   }
   const updated = await prisma.idea.update({
     where: { id },
-    data: { title, caption, description, priorOdrExperience },
+    data: { title, caption, description },
   });
   res.json(updated);
 });
@@ -350,7 +384,7 @@ router.get("/:id/comments", async (req, res) => {
   const { id } = req.params;
   const comments = await prisma.comment.findMany({
     where: { ideaId: id },
-    include: { user: true, replies: true, likes: true },
+    include: { author: true, replies: true, likes: true }, // Changed from user to author
     orderBy: { createdAt: "desc" },
   });
   res.json(comments);
@@ -365,10 +399,10 @@ authenticatedRouter.post("/:id/comments", async (req: AuthRequest, res) => {
     data: {
       content,
       ideaId: id,
-      userId: req.user!.id,
+      authorId: req.user!.id, // Changed from userId to authorId
       parentId: parentId || null,
     },
-    include: { user: true, replies: true, likes: true },
+    include: { author: true, replies: true, likes: true }, // Changed from user to author
   });
   res.status(201).json(comment);
 });
@@ -451,6 +485,170 @@ authenticatedRouter.post("/:id/comments/:commentId/likes", async (req: AuthReque
     return res.json({ liked: false });
   }
 });
+
+// Get team details for an idea (owner, collaborators, mentors)
+router.get("/:id/team", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  
+  try {
+    // Get idea with owner information
+    const idea = await prisma.idea.findUnique({
+      where: { id, approved: true },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            imageAvatar: true,
+            country: true,
+            city: true,
+            // Include role-specific tables
+            innovator: true,
+            faculty: true,
+            // Remove fields that don't exist directly on User
+            // institution: true,
+          }
+        }
+      }
+    });
+    
+    if (!idea) {
+      return res.status(404).json({ error: "Idea not found or not approved" });
+    }
+    
+    // Get collaborators
+    const collaborators = await prisma.ideaCollaborator.findMany({
+      where: { ideaId: id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            imageAvatar: true,
+            country: true,
+            city: true,
+            // Include role-specific tables
+            innovator: true,
+            faculty: true,
+            // Remove fields that don't exist directly on User
+            // institution: true,
+          }
+        }
+      }
+    });
+    
+    // Get mentors
+    const mentors = await prisma.ideaMentor.findMany({
+      where: { ideaId: id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            imageAvatar: true,
+            country: true,
+            city: true,
+            // Include role-specific tables
+            innovator: true,
+            faculty: true,
+            mentor: true,
+            // Remove fields that don't exist directly on User
+            // institution: true,
+          }
+        }
+      }
+    });
+    
+    // Helper function to get institution from user based on role
+    function getUserInstitution(user: any): string | null {
+      if (user.innovator) return user.innovator.institution;
+      if (user.faculty) return user.faculty.institution;
+      return null;
+    }
+    
+    // Format the owner data
+    const ownerData = {
+      id: idea.owner.id,
+      name: idea.owner.name,
+      email: idea.owner.email,
+      image: idea.owner.imageAvatar || '/placeholder-avatar.png',
+      description: `${getUserInstitution(idea.owner) || ''} ${idea.owner.country || ''}`.trim() || 'Project Owner',
+      role: 'owner'
+    };
+    
+    // Format collaborator data
+    const collaboratorsData = collaborators.map(collab => ({
+      id: collab.user.id,
+      name: collab.user.name,
+      email: collab.user.email,
+      image: collab.user.imageAvatar || '/placeholder-avatar.png',
+      description: `${getUserInstitution(collab.user) || ''} ${collab.user.country || ''}`.trim() || 'Team Member',
+      role: 'collaborator'
+    }));
+    
+    // Format mentor data (if any)
+    let mentorData = undefined;
+    if (mentors.length > 0) {
+      mentorData = {
+        id: mentors[0].user.id,
+        name: mentors[0].user.name,
+        email: mentors[0].user.email,
+        image: mentors[0].user.imageAvatar || '/placeholder-avatar.png',
+        description: `${getUserInstitution(mentors[0].user) || ''} ${mentors[0].user.country || ''}`.trim() || 'Project Mentor',
+        role: 'mentor'
+      };
+    }
+    
+    // Format the final response
+    const teamData = {
+      owner: ownerData,
+      mentor: mentorData,
+      collaborators: collaboratorsData
+    };
+    
+    res.json(teamData);
+  } catch (err) {
+    console.error("[Ideas] Error fetching team details:", err);
+    res.status(500).json({ error: "Failed to fetch team details" });
+  }
+});
+
+// Helper function to process user fields from role-specific tables
+function processUserFields(user: any) {
+  if (!user) return user;
+  
+  // Create a processed user object without the role-specific records
+  const processedUser = { ...user };
+  
+  // Add role-specific fields based on user role
+  if (user.userRole === "INNOVATOR" && user.innovator) {
+    processedUser.institution = user.innovator.institution;
+    processedUser.highestEducation = user.innovator.highestEducation;
+    processedUser.courseName = user.innovator.courseName;
+    processedUser.courseStatus = user.innovator.courseStatus;
+    processedUser.description = user.innovator.description;
+  } else if (user.userRole === "FACULTY" && user.faculty) {
+    processedUser.institution = user.faculty.institution;
+    processedUser.role = user.faculty.role;
+    processedUser.expertise = user.faculty.expertise;
+  } else if (user.userRole === "MENTOR" && user.mentor) {
+    processedUser.mentorType = user.mentor.mentorType;
+    processedUser.organization = user.mentor.organization;
+    processedUser.role = user.mentor.role;
+    processedUser.expertise = user.mentor.expertise;
+  }
+  
+  // Remove the role-specific records to avoid duplicating data
+  delete processedUser.innovator;
+  delete processedUser.mentor;
+  delete processedUser.faculty;
+  delete processedUser.other;
+  
+  return processedUser;
+}
 
 // Mount authenticated and admin routers on the main router
 router.use("/", authenticatedRouter);

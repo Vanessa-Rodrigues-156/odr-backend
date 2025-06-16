@@ -11,7 +11,9 @@ export default async function sessionHandler(req: AuthRequest, res: Response) {
       error: "Not authenticated" 
     });
   }
+  
   // Format user data for consistent response
+  // Only include base user properties, role-specific properties should be added by the middleware
   const user: AuthUser = {
     id: req.user.id,
     name: req.user.name,
@@ -20,11 +22,25 @@ export default async function sessionHandler(req: AuthRequest, res: Response) {
     contactNumber: req.user.contactNumber,
     city: req.user.city,
     country: req.user.country,
-    institution: req.user.institution,
-    highestEducation: req.user.highestEducation,
-    odrLabUsage: req.user.odrLabUsage,
     createdAt: req.user.createdAt,
+    
+    // Include role-specific properties that may have been attached by the middleware
+    ...(req.user.institution !== undefined && { institution: req.user.institution }),
+    ...(req.user.highestEducation !== undefined && { highestEducation: req.user.highestEducation }),
+    ...(req.user.courseName !== undefined && { courseName: req.user.courseName }),
+    ...(req.user.courseStatus !== undefined && { courseStatus: req.user.courseStatus }),
+    ...(req.user.mentorType !== undefined && { mentorType: req.user.mentorType }),
+    ...(req.user.organization !== undefined && { organization: req.user.organization }),
+    ...(req.user.role !== undefined && { role: req.user.role }),
+    ...(req.user.expertise !== undefined && { expertise: req.user.expertise }),
+    ...(req.user.course !== undefined && { course: req.user.course }),
+    ...(req.user.mentoring !== undefined && { mentoring: req.user.mentoring }),
+    ...(req.user.workplace !== undefined && { workplace: req.user.workplace }),
+    ...(req.user.description !== undefined && { description: req.user.description }),
   };
+  
+  // Remove the odrLabUsage field as it doesn't exist in the schema anymore
+  // user.odrLabUsage = req.user.odrLabUsage;
   
   // Log successful session check
   console.log(`Session valid for user: ${user.email} with role: ${user.userRole}`);

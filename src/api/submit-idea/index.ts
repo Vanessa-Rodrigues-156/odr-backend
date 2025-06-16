@@ -31,12 +31,12 @@ authenticatedRouter.post("/", async (req: AuthRequest, res) => {
 
   try {
     // req.user is guaranteed to be defined because of ensureAuthenticated middleware
-    const idea = await prisma.idea.create({
+    const idea = await prisma.ideaSubmission.create({
       data: {
         title,
         caption: idea_caption || null,
         description,
-        priorOdrExperience: odr_experience,
+        priorOdrExperience: odr_experience || null,
         ownerId: req.user!.id,
         approved: false,
       },

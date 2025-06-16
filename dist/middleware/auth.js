@@ -34,29 +34,73 @@ const authenticateJWT = async (req, res, next) => {
             });
         }
         req.jwtPayload = decoded;
+        // Update user lookup to include role-specific models
         const user = await prisma_1.default.user.findUnique({
             where: {
                 id: userId,
             },
             select: {
                 id: true,
-                email: true,
                 name: true,
+                email: true,
                 userRole: true,
-                country: true,
-                institution: true,
-                city: true,
-                highestEducation: true,
                 contactNumber: true,
-                odrLabUsage: true,
+                city: true,
+                country: true,
                 createdAt: true,
+                // Include role-specific models
+                innovator: true,
+                mentor: true,
+                faculty: true,
+                other: true,
             },
         });
         if (!user) {
             console.log(`User not found for id: ${userId}`);
             return res.status(401).json({ error: "User not found" });
         }
-        req.user = user;
+        // Add role-specific data to user object before setting req.user
+        let roleData = {};
+        if (user.userRole === "INNOVATOR" && user.innovator) {
+            roleData = {
+                institution: user.innovator.institution,
+                highestEducation: user.innovator.highestEducation,
+                courseName: user.innovator.courseName,
+                courseStatus: user.innovator.courseStatus,
+                description: user.innovator.description,
+            };
+        }
+        else if (user.userRole === "MENTOR" && user.mentor) {
+            roleData = {
+                mentorType: user.mentor.mentorType,
+                organization: user.mentor.organization,
+                role: user.mentor.role,
+                expertise: user.mentor.expertise,
+                description: user.mentor.description,
+            };
+        }
+        else if (user.userRole === "FACULTY" && user.faculty) {
+            roleData = {
+                institution: user.faculty.institution,
+                role: user.faculty.role,
+                expertise: user.faculty.expertise,
+                course: user.faculty.course,
+                mentoring: user.faculty.mentoring,
+                description: user.faculty.description,
+            };
+        }
+        else if (user.userRole === "OTHER" && user.other) {
+            roleData = {
+                role: user.other.role,
+                workplace: user.other.workplace,
+                description: user.other.description,
+            };
+        }
+        // Merge base user data with role-specific data
+        req.user = {
+            ...user,
+            ...roleData,
+        };
         next();
     }
     catch (err) {

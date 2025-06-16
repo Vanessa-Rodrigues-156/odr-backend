@@ -23,11 +23,19 @@ router.get("/", async (req, res) => {
                 contactNumber: true,
                 city: true,
                 country: true,
-                institution: true,
-                highestEducation: true,
-                odrLabUsage: true,
                 createdAt: true,
-                mentoringIdeas: {
+                // Include the mentor-specific data
+                mentor: {
+                    select: {
+                        mentorType: true,
+                        organization: true,
+                        role: true,
+                        expertise: true,
+                        description: true,
+                    }
+                },
+                // Get ideas where this user is a mentor using ideaMentors relation
+                ideaMentors: {
                     include: {
                         idea: {
                             select: {
@@ -36,14 +44,37 @@ router.get("/", async (req, res) => {
                                 caption: true,
                                 description: true,
                                 createdAt: true,
-                                views: true
                             }
                         }
                     }
                 }
             }
         });
-        res.json({ mentors });
+        // Process the data to flatten it and make it more convenient for frontend use
+        const processedMentors = mentors.map(mentor => {
+            // Extract the mentor-specific data
+            const mentorSpecificData = mentor.mentor || {};
+            // Extract the ideas this user mentors
+            const mentoringIdeas = mentor.ideaMentors.map(relationship => ({
+                role: relationship.role,
+                idea: relationship.idea
+            }));
+            // Return flattened structure
+            return {
+                id: mentor.id,
+                name: mentor.name,
+                email: mentor.email,
+                contactNumber: mentor.contactNumber,
+                city: mentor.city,
+                country: mentor.country,
+                createdAt: mentor.createdAt,
+                // Add mentor-specific fields
+                ...mentorSpecificData,
+                // Add mentored ideas
+                mentoringIdeas
+            };
+        });
+        res.json({ mentors: processedMentors });
     }
     catch (error) {
         console.error("Error fetching mentors:", error);
@@ -63,11 +94,11 @@ router.get("/:id", async (req, res) => {
                 contactNumber: true,
                 city: true,
                 country: true,
-                institution: true,
-                highestEducation: true,
-                odrLabUsage: true,
                 createdAt: true,
-                mentoringIdeas: {
+                // Include the mentor-specific data
+                mentor: true,
+                // Get ideas where this user is a mentor
+                ideaMentors: {
                     include: {
                         idea: {
                             select: {
@@ -76,7 +107,6 @@ router.get("/:id", async (req, res) => {
                                 caption: true,
                                 description: true,
                                 createdAt: true,
-                                views: true
                             }
                         }
                     }
@@ -86,7 +116,28 @@ router.get("/:id", async (req, res) => {
         if (!mentor) {
             return res.status(404).json({ error: "Mentor not found" });
         }
-        res.json(mentor);
+        // Process data to flatten the structure
+        const mentorData = {
+            id: mentor.id,
+            name: mentor.name,
+            email: mentor.email,
+            contactNumber: mentor.contactNumber,
+            city: mentor.city,
+            country: mentor.country,
+            createdAt: mentor.createdAt,
+            // Add mentor-specific fields
+            mentorType: mentor.mentor?.mentorType,
+            organization: mentor.mentor?.organization,
+            role: mentor.mentor?.role,
+            expertise: mentor.mentor?.expertise,
+            description: mentor.mentor?.description,
+            // Add mentored ideas
+            mentoringIdeas: mentor.ideaMentors.map(relationship => ({
+                role: relationship.role,
+                idea: relationship.idea
+            }))
+        };
+        res.json(mentorData);
     }
     catch (error) {
         console.error("Error fetching mentor:", error);

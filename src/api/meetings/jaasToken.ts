@@ -33,7 +33,7 @@ async function jaasTokenHandlerImpl(
     aud: "jitsi",
     iss: JAAS_APP_ID,
     sub: "meet.jit.si",
-    room: meeting.jitsiRoomName,
+    room: meeting.roomName,
     exp: Math.floor(Date.now() / 1000) + 60 * 60, // 1 hour
     context: {
       user: {
