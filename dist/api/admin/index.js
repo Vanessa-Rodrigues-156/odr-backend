@@ -39,7 +39,7 @@ router.post("/approve-idea", requireAdmin, async (req, res) => {
         });
         if (submission) {
             // This is a submission that needs to be converted to an idea
-            // Only use fields that exist in the Idea model
+            // Only explicitly include fields that we know exist in the database
             const idea = await prisma_1.default.idea.create({
                 data: {
                     title: submission.title,
@@ -47,10 +47,7 @@ router.post("/approve-idea", requireAdmin, async (req, res) => {
                     description: submission.description,
                     approved: true,
                     ownerId: submission.ownerId,
-                    // Remove fields that don't exist in the Idea model
-                    // priorOdrExperience: submission.priorOdrExperience,
-                    // reviewedAt: new Date(),
-                    // reviewedBy: req.user?.id,
+                    // Note: don't include 'featured' as it may not exist in the database yet
                 }
             });
             // Update the submission to mark it as reviewed and approved
@@ -83,7 +80,15 @@ router.post("/approve-idea", requireAdmin, async (req, res) => {
     }
     catch (error) {
         console.error("Error approving idea:", error);
-        res.status(500).json({ error: "Failed to approve idea. Please try again." });
+        // Provide more specific error message for schema mismatches
+        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2022') {
+            const prismaError = error;
+            return res.status(500).json({
+                error: `Database schema mismatch: Column '${prismaError.meta?.column}' in model '${prismaError.meta?.modelName}' doesn't exist in the database. Run prisma migrate to update your database.`,
+                details: prismaError.message
+            });
+        }
+        res.status(500).json({ error: "Failed to approve idea. Please try again.", details: error instanceof Error ? error.message : String(error) });
     }
 });
 // Reject (delete) an idea
