@@ -32,19 +32,11 @@ async function loginHandler(req, res) {
         // Find the user with a more specific select
         const user = await prisma_1.default.user.findUnique({
             where: { email: normalizedEmail },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                password: true, // Need this for comparison
-                userRole: true,
-                contactNumber: true,
-                city: true,
-                country: true,
-                institution: true,
-                highestEducation: true,
-                odrLabUsage: true,
-                createdAt: true,
+            include: {
+                innovator: true,
+                mentor: true,
+                faculty: true,
+                other: true,
             },
         });
         // User not found - return generic error
@@ -71,19 +63,55 @@ async function loginHandler(req, res) {
         }
         // Remove password from user object
         const { password: _pw, ...userWithoutPassword } = user;
+        // Extract type-specific data
+        let typeSpecificData = {};
+        // Get type-specific data based on user role
+        if (user.userRole === "INNOVATOR" && user.innovator) {
+            typeSpecificData = {
+                institution: user.innovator.institution,
+                highestEducation: user.innovator.highestEducation,
+                odrLabUsage: user.innovator.description,
+                courseName: user.innovator.courseName,
+                courseStatus: user.innovator.courseStatus,
+            };
+        }
+        else if (user.userRole === "MENTOR" && user.mentor) {
+            typeSpecificData = {
+                institution: user.mentor.organization,
+                odrLabUsage: user.mentor.description,
+                mentorType: user.mentor.mentorType,
+                role: user.mentor.role,
+                expertise: user.mentor.expertise,
+            };
+        }
+        else if (user.userRole === "FACULTY" && user.faculty) {
+            typeSpecificData = {
+                institution: user.faculty.institution,
+                odrLabUsage: user.faculty.description,
+                role: user.faculty.role,
+                expertise: user.faculty.expertise,
+                course: user.faculty.course,
+                mentoring: user.faculty.mentoring,
+            };
+        }
+        else if (user.other) {
+            typeSpecificData = {
+                institution: user.other.workplace,
+                odrLabUsage: user.other.description,
+                role: user.other.role,
+            };
+        }
         // Format user data for response
         const userResponse = {
-            id: userWithoutPassword.id,
-            name: userWithoutPassword.name,
-            email: userWithoutPassword.email,
-            userRole: userWithoutPassword.userRole,
-            contactNumber: userWithoutPassword.contactNumber,
-            city: userWithoutPassword.city,
-            country: userWithoutPassword.country,
-            institution: userWithoutPassword.institution,
-            highestEducation: userWithoutPassword.highestEducation,
-            odrLabUsage: userWithoutPassword.odrLabUsage,
-            createdAt: userWithoutPassword.createdAt,
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            userRole: user.userRole,
+            contactNumber: user.contactNumber,
+            city: user.city,
+            country: user.country,
+            createdAt: user.createdAt,
+            ...typeSpecificData
         };
         // Check JWT secret is configured
         const jwtSecret = process.env.JWT_SECRET;

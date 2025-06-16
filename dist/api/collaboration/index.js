@@ -34,13 +34,22 @@ router.get("/:ideaId/collaborators", async (req, res) => {
                         email: true,
                         userRole: true,
                         country: true,
-                        institution: true,
                         city: true,
+                        // Include role-specific tables instead of direct fields
+                        innovator: true,
+                        mentor: true,
+                        faculty: true,
+                        other: true,
                     }
                 }
             },
         });
-        res.json(collaborators);
+        // Process user data to include role-specific fields
+        const processedCollaborators = collaborators.map(collab => ({
+            ...collab,
+            user: processUserFields(collab.user)
+        }));
+        res.json(processedCollaborators);
     }
     catch (error) {
         console.error("Failed to get collaborators:", error);
@@ -61,13 +70,22 @@ router.get("/:ideaId/mentors", async (req, res) => {
                         email: true,
                         userRole: true,
                         country: true,
-                        institution: true,
                         city: true,
+                        // Include role-specific tables instead of direct fields
+                        innovator: true,
+                        mentor: true,
+                        faculty: true,
+                        other: true,
                     }
                 }
             },
         });
-        res.json(mentors);
+        // Process user data to include role-specific fields
+        const processedMentors = mentors.map(mentor => ({
+            ...mentor,
+            user: processUserFields(mentor.user)
+        }));
+        res.json(processedMentors);
     }
     catch (error) {
         console.error("Failed to get mentors:", error);
@@ -79,10 +97,13 @@ authenticatedRouter.post("/:ideaId/join-collaborator", async (req, res) => {
     const { ideaId } = req.params;
     const userId = req.user.id; // Non-null assertion is safe due to middleware
     try {
-        // Check if user is already a collaborator
+        // Check if user is already a collaborator - use consistent key format based on schema
         const existingCollab = await prisma_1.default.ideaCollaborator.findUnique({
             where: {
-                userId_ideaId: { userId, ideaId }
+                ideaId_userId: {
+                    ideaId: ideaId,
+                    userId: userId
+                }
             }
         });
         if (existingCollab) {
@@ -120,10 +141,13 @@ authenticatedRouter.delete("/:ideaId/leave-collaborator", async (req, res) => {
     const { ideaId } = req.params;
     const userId = req.user.id; // Non-null assertion is safe due to middleware
     try {
-        // Delete the collaborator record
+        // Delete the collaborator record using the compound unique constraint with correct field order
         await prisma_1.default.ideaCollaborator.delete({
             where: {
-                userId_ideaId: { userId, ideaId }
+                ideaId_userId: {
+                    ideaId: ideaId,
+                    userId: userId
+                }
             }
         });
         res.json({
@@ -141,10 +165,13 @@ authenticatedRouter.post("/:ideaId/request-mentor", async (req, res) => {
     const { ideaId } = req.params;
     const userId = req.user.id; // Non-null assertion is safe due to middleware
     try {
-        // Check if user is already a mentor
+        // Check if user is already a mentor - use consistent key format based on schema
         const existingMentor = await prisma_1.default.ideaMentor.findUnique({
             where: {
-                userId_ideaId: { userId, ideaId }
+                ideaId_userId: {
+                    ideaId: ideaId,
+                    userId: userId
+                }
             }
         });
         if (existingMentor) {
@@ -182,10 +209,13 @@ authenticatedRouter.delete("/:ideaId/leave-mentor", async (req, res) => {
     const { ideaId } = req.params;
     const userId = req.user.id; // Non-null assertion is safe due to middleware
     try {
-        // Delete the mentor record
+        // Delete the mentor record using the compound unique constraint with correct field order
         await prisma_1.default.ideaMentor.delete({
             where: {
-                userId_ideaId: { userId, ideaId }
+                ideaId_userId: {
+                    ideaId: ideaId,
+                    userId: userId
+                }
             }
         });
         res.json({
@@ -198,6 +228,43 @@ authenticatedRouter.delete("/:ideaId/leave-mentor", async (req, res) => {
         res.status(500).json({ error: "Failed to leave mentorship. You may not be a mentor." });
     }
 });
+// Helper function to process user fields from role-specific tables
+function processUserFields(user) {
+    if (!user)
+        return user;
+    // Create a processed user object without the role-specific records
+    const processedUser = { ...user };
+    // Add role-specific fields based on user role
+    if (user.userRole === "INNOVATOR" && user.innovator) {
+        processedUser.institution = user.innovator.institution;
+        processedUser.highestEducation = user.innovator.highestEducation;
+        processedUser.courseName = user.innovator.courseName;
+        processedUser.courseStatus = user.innovator.courseStatus;
+        processedUser.description = user.innovator.description;
+    }
+    else if (user.userRole === "FACULTY" && user.faculty) {
+        processedUser.institution = user.faculty.institution;
+        processedUser.role = user.faculty.role;
+        processedUser.expertise = user.faculty.expertise;
+    }
+    else if (user.userRole === "MENTOR" && user.mentor) {
+        processedUser.mentorType = user.mentor.mentorType;
+        processedUser.organization = user.mentor.organization;
+        processedUser.role = user.mentor.role;
+        processedUser.expertise = user.mentor.expertise;
+    }
+    else if (user.userRole === "OTHER" && user.other) {
+        processedUser.role = user.other.role;
+        processedUser.workplace = user.other.workplace;
+        processedUser.description = user.other.description;
+    }
+    // Remove the role-specific records to avoid duplicating data
+    delete processedUser.innovator;
+    delete processedUser.mentor;
+    delete processedUser.faculty;
+    delete processedUser.other;
+    return processedUser;
+}
 // Mount authenticated router on the main router
 router.use("/", authenticatedRouter);
 exports.default = router;

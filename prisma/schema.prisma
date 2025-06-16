@@ -1,6 +1,8 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -9,215 +11,218 @@ datasource db {
 }
 
 enum UserRole {
+  ADMIN
   INNOVATOR
   MENTOR
-  ADMIN
+  FACULTY
   OTHER
 }
 
+enum MentorType {
+  TECHNICAL_EXPERT
+  LEGAL_EXPERT
+  ODR_EXPERT
+  CONFLICT_RESOLUTION_EXPERT
+}
+
 model User {
-  id               String   @id @default(uuid())
-  name             String
-  email            String   @unique
-  password         String?
-  contactNumber    String?
-  city             String?
-  country          String?
-  userRole         UserRole @default(INNOVATOR)
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  password      String?
+  contactNumber String?
+  city          String?
+  country       String?
+  userRole      UserRole
+  imageAvatar   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relationships to type-specific tables
+  innovator        Innovator?
+  mentor           Mentor?
+  faculty          Faculty?
+  other            Other?
+
+  // Relationships to other tables
+  ideas            Idea[]
+  ideaSubmissions  IdeaSubmission[]
+  ideaCollaborators IdeaCollaborator[]
+  ideaMentors      IdeaMentor[]
+  comments         Comment[]
+  likes            Like[]
+  meetingLogs      MeetingLog[]
+}
+
+model Innovator {
+  id               String  @id @default(uuid())
+  userId           String  @unique
   institution      String?
   highestEducation String?
-  odrLabUsage      String? // How are you gonna use ODRLab?
-  createdAt        DateTime @default(now())
-  imageAvatar      String?
-  // Relationships
-  ownedIdeas         Idea[]             @relation("IdeaOwner")
-  collaboratingIdeas IdeaCollaborator[]
-  mentoringIdeas     IdeaMentor[]
-  comments           Comment[]
-  likes              Like[]
+  courseName       String?
+  courseStatus     String?
+  description      String?
 
-  // Meeting relationships
-  createdMeetings       MeetingLog[]         @relation("MeetingCreator")
-  meetingParticipations MeetingParticipant[]
-  meetingNotes          MeetingNote[]
-  editedNotes           MeetingNote[]        @relation("NoteEditor")
-  IdeaSubmission        IdeaSubmission[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Mentor {
+  id           String     @id @default(uuid())
+  userId       String     @unique
+  mentorType   MentorType
+  organization String?
+  role         String?
+  expertise    String?
+  description  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Faculty {
+  id          String  @id @default(uuid())
+  userId      String  @unique
+  institution String?
+  role        String?
+  expertise   String?
+  course      String?
+  mentoring   Boolean @default(false)
+  description String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Other {
+  id          String  @id @default(uuid())
+  userId      String  @unique
+  role        String?
+  workplace   String?
+  description String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Idea {
-  id                 String  @id @default(uuid())
+  id          String    @id @default(uuid())
+  title       String
+  caption     String?
+  description String
+  ownerId     String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  approved    Boolean   @default(false)
+  featured    Boolean   @default(false)
+
+  // Relationships
+  owner       User      @relation(fields: [ownerId], references: [id])
+  collaborators IdeaCollaborator[]
+  mentors     IdeaMentor[]
+  comments    Comment[]
+  likes       Like[]
+}
+
+model IdeaSubmission {
+  id                 String    @id @default(uuid())
   title              String
   caption            String?
-  description        String  @db.Text
-  priorOdrExperience String? @db.Text
+  description        String
+  priorOdrExperience String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  ownerId            String
+  reviewed           Boolean   @default(false)
+  reviewedAt         DateTime?
+  reviewedBy         String?
+  approved           Boolean   @default(false)
+  rejected           Boolean   @default(false)
+  rejectionReason    String?
 
-  // Status
-  approved   Boolean   @default(false)
-  reviewedAt DateTime?
-  reviewedBy String?
+  // Relationships
+  owner              User      @relation(fields: [ownerId], references: [id])
+}
 
-  // Timestamps
+model IdeaCollaborator {
+  id        String   @id @default(uuid())
+  ideaId    String
+  userId    String
+  role      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  // Relationships
+  idea      Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Owner relationship
-  ownerId String
-  owner   User   @relation("IdeaOwner", fields: [ownerId], references: [id])
-
-  // Many-to-Many relationships 
-  collaborators IdeaCollaborator[]
-  mentors       IdeaMentor[]
-
-  // Engagement metrics
-  views Int @default(0)
-
-  // Related content
-  comments Comment[]
-  likes    Like[]
-  meetings MeetingLog[]
+  @@unique([ideaId, userId])
 }
 
-// Junction table for idea collaborators (many-to-many)
-model IdeaCollaborator {
-  user     User     @relation(fields: [userId], references: [id])
-  userId   String
-  idea     Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
-  ideaId   String
-  joinedAt DateTime @default(now())
-
-  @@id([userId, ideaId])
-}
-
-// Junction table for idea mentors (many-to-many)
 model IdeaMentor {
-  user       User     @relation(fields: [userId], references: [id])
-  userId     String
-  idea       Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
-  ideaId     String
-  assignedAt DateTime @default(now())
+  id        String   @id @default(uuid())
+  ideaId    String
+  userId    String
+  role      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relationships
+  idea      Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([userId, ideaId])
+  @@unique([ideaId, userId])
 }
 
 model Comment {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   content   String
-  createdAt DateTime @default(now())
-
-  // Relations
-  ideaId String
-  idea   Idea   @relation(fields: [ideaId], references: [id], onDelete: Cascade)
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  // For threaded/nested comments
-  parentId String?
-  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
-  replies  Comment[] @relation("CommentReplies")
-
-  // Likes for this comment are tracked in the Like model
-  likes Like[] @relation("CommentLikes")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  // Relationships
+  ideaId    String
+  idea      Idea      @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  
+  authorId  String
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  
+  parentId  String?
+  parent    Comment?  @relation("CommentToComment", fields: [parentId], references: [id], onDelete: SetNull)
+  replies   Comment[] @relation("CommentToComment")
+  
+  likes     Like[]
 }
 
-// Separate model for tracking likes
 model Like {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
-
-  // User who liked
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  // What was liked (either an Idea or a Comment, but not both)
-  ideaId String?
-  idea   Idea?   @relation(fields: [ideaId], references: [id], onDelete: Cascade)
-
+  
+  // Relationships - can be on idea or comment
+  ideaId    String?
+  idea      Idea?    @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  
   commentId String?
-  comment   Comment? @relation("CommentLikes", fields: [commentId], references: [id], onDelete: Cascade)
-
+  comment   Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
   @@unique([userId, ideaId])
   @@unique([userId, commentId])
 }
 
-enum MeetingStatus {
-  SCHEDULED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-}
-
 model MeetingLog {
-  id            String        @id @default(uuid())
-  title         String
-  startTime     DateTime
+  id            String   @id @default(uuid())
+  roomName      String
+  startTime     DateTime @default(now())
   endTime       DateTime?
-  recordingUrl  String?       @db.Text
-  summary       String?       @db.Text
-  status        MeetingStatus @default(SCHEDULED)
-  jitsiRoomName String        @unique // Store the Jitsi room name for integration
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-
-  // Relations
-  ideaId String
-  idea   Idea   @relation(fields: [ideaId], references: [id], onDelete: Cascade)
-
-  createdById String
-  createdBy   User   @relation("MeetingCreator", fields: [createdById], references: [id])
-
-  participants MeetingParticipant[]
-  notes        MeetingNote[]
-}
-
-model MeetingParticipant {
-  id          String     @id @default(uuid())
-  userId      String
-  user        User       @relation(fields: [userId], references: [id])
-  meetingId   String
-  meeting     MeetingLog @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  joinTime    DateTime?
-  leaveTime   DateTime?
-  isPresenter Boolean    @default(false)
-
-  @@unique([userId, meetingId])
-}
-
-model MeetingNote {
-  id        String   @id @default(uuid())
-  content   String   @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  meetingId String
-  meeting   MeetingLog @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-
-  authorId String
-  author   User   @relation(fields: [authorId], references: [id])
-
-  // For collaborative editing tracking
-  lastEditedById String?
-  lastEditedBy   User?   @relation("NoteEditor", fields: [lastEditedById], references: [id])
-}
-
-model IdeaSubmission {
-  id                 String   @id @default(uuid())
-  title              String
-  caption            String?
-  description        String   @db.Text
-  priorOdrExperience String?  @db.Text
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  // Owner relationship
-  ownerId String
-  owner   User   @relation(fields: [ownerId], references: [id])
-
-  // Status
-  reviewed        Boolean   @default(false)
-  reviewedAt      DateTime?
-  reviewedBy      String?
-  approved        Boolean   @default(false)
-  rejected        Boolean   @default(false)
-  rejectionReason String?
+  duration      Int?     // Duration in seconds
+  participants  Int?     // Number of participants
+  initiatorId   String
+  initiator     User     @relation(fields: [initiatorId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Additional optional fields
+  meetingTitle  String?
+  ideaId        String?
+  recordingUrl  String?
+  summaryText   String?
 }

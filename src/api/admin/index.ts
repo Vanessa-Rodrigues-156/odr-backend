@@ -39,16 +39,18 @@ router.post("/approve-idea", requireAdmin, async (req: AuthRequest, res) => {
 
     if (submission) {
       // This is a submission that needs to be converted to an idea
+      // Only use fields that exist in the Idea model
       const idea = await prisma.idea.create({
         data: {
           title: submission.title,
           caption: submission.caption,
           description: submission.description,
-          priorOdrExperience: submission.priorOdrExperience,
           approved: true,
-          reviewedAt: new Date(),
-          reviewedBy: req.user?.id,
           ownerId: submission.ownerId,
+          // Remove fields that don't exist in the Idea model
+          // priorOdrExperience: submission.priorOdrExperience,
+          // reviewedAt: new Date(),
+          // reviewedBy: req.user?.id,
         }
       });
 

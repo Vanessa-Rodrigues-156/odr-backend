@@ -12,28 +12,59 @@ export default async function googleSignInHandler(req: Request, res: Response) {
     
     console.log(`Google sign-in attempt for email: ${email}`);
     
-    // Check if user exists
+    // Check if user exists with related profiles
     let user = await prisma.user.findUnique({
       where: { email },
+      include: {
+        innovator: true,
+        mentor: true,
+        faculty: true,
+        other: true,
+      }
     });
     
     let needsProfileCompletion = false;
     
     if (!user) {
       // Create new user with minimal information
-      user = await prisma.user.create({
-        data: {
-          email,
-          name,
-          userRole: "INNOVATOR", // Default role
-        },
+      user = await prisma.$transaction(async (prisma) => {
+        const newUser = await prisma.user.create({
+          data: {
+            email,
+            name,
+            userRole: "INNOVATOR", // Default role
+          },
+        });
+        
+        // Create corresponding Innovator record
+        await prisma.innovator.create({
+          data: {
+            userId: newUser.id,
+          }
+        });
+        
+        return prisma.user.findUnique({
+          where: { id: newUser.id },
+          include: {
+            innovator: true,
+            mentor: true,
+            faculty: true,
+            other: true,
+          }
+        });
       });
+      
       needsProfileCompletion = true;
       console.log(`New user created from Google sign-in: ${email}`);
     } else if (!user.contactNumber || !user.city || !user.country) {
       // If user exists but profile is incomplete
       needsProfileCompletion = true;
       console.log(`Existing user with incomplete profile: ${email}`);
+    }
+    
+    // Ensure TypeScript knows user is not null here
+    if (!user) {
+      return res.status(500).json({ error: "Failed to create or retrieve user" });
     }
     
     // Create JWT token
@@ -56,6 +87,26 @@ export default async function googleSignInHandler(req: Request, res: Response) {
       console.log(`Google sign-in successful, profile completion needed for: ${email}`);
     }
     
+    // Prepare role-specific data for the response
+    let roleSpecificData = {};
+    if (user.userRole === "INNOVATOR" && user.innovator) {
+      roleSpecificData = {
+        institution: user.innovator.institution,
+        highestEducation: user.innovator.highestEducation,
+        courseName: user.innovator.courseName,
+        courseStatus: user.innovator.courseStatus,
+      };
+    } else if (user.userRole === "MENTOR" && user.mentor) {
+      roleSpecificData = {
+        mentorType: user.mentor.mentorType,
+        organization: user.mentor.organization,
+      };
+    } else if (user.userRole === "FACULTY" && user.faculty) {
+      roleSpecificData = {
+        institution: user.faculty.institution,
+      };
+    }
+    
     // Return appropriate response based on profile completion status
     return res.status(200).json({
       user: {
@@ -66,10 +117,8 @@ export default async function googleSignInHandler(req: Request, res: Response) {
         contactNumber: user.contactNumber,
         city: user.city,
         country: user.country,
-        institution: user.institution,
-        highestEducation: user.highestEducation,
-        odrLabUsage: user.odrLabUsage,
         createdAt: user.createdAt,
+        ...roleSpecificData,
       },
       needsProfileCompletion,
       token,

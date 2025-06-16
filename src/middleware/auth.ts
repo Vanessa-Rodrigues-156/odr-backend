@@ -7,13 +7,34 @@ export interface AuthUser {
   email: string;
   name: string;
   userRole: string;
-  country?: string | null;
-  institution?: string | null;
-  city?: string | null;
-  highestEducation?: string | null;
   contactNumber?: string | null;
-  odrLabUsage?: string | null;
+  city?: string | null;
+  country?: string | null;
   createdAt?: Date;
+
+  // Role-specific fields that might be attached
+  // Innovator fields
+  institution?: string | null;
+  highestEducation?: string | null;
+  courseName?: string | null;
+  courseStatus?: string | null;
+
+  // Mentor fields
+  mentorType?: string | null;
+  organization?: string | null;
+
+  // Faculty fields
+  course?: string | null;
+  mentoring?: boolean | null;
+
+  // Fields that can appear in multiple role types
+  role?: string | null;
+  expertise?: string | null;
+  workplace?: string | null;
+  description?: string | null;
+
+  // Remove fields that no longer exist
+  // odrLabUsage?: string | null;
 }
 
 export interface AuthRequest extends Request {
@@ -65,22 +86,25 @@ export const authenticateJWT = async (
 
     req.jwtPayload = decoded;
 
+    // Update user lookup to include role-specific models
     const user = await prisma.user.findUnique({
       where: {
         id: userId,
       },
       select: {
         id: true,
-        email: true,
         name: true,
+        email: true,
         userRole: true,
-        country: true,
-        institution: true,
-        city: true,
-        highestEducation: true,
         contactNumber: true,
-        odrLabUsage: true,
+        city: true,
+        country: true,
         createdAt: true,
+        // Include role-specific models
+        innovator: true,
+        mentor: true,
+        faculty: true,
+        other: true,
       },
     });
 
@@ -89,7 +113,48 @@ export const authenticateJWT = async (
       return res.status(401).json({ error: "User not found" });
     }
 
-    req.user = user;
+    // Add role-specific data to user object before setting req.user
+    let roleData = {};
+
+    if (user.userRole === "INNOVATOR" && user.innovator) {
+      roleData = {
+        institution: user.innovator.institution,
+        highestEducation: user.innovator.highestEducation,
+        courseName: user.innovator.courseName,
+        courseStatus: user.innovator.courseStatus,
+        description: user.innovator.description,
+      };
+    } else if (user.userRole === "MENTOR" && user.mentor) {
+      roleData = {
+        mentorType: user.mentor.mentorType,
+        organization: user.mentor.organization,
+        role: user.mentor.role,
+        expertise: user.mentor.expertise,
+        description: user.mentor.description,
+      };
+    } else if (user.userRole === "FACULTY" && user.faculty) {
+      roleData = {
+        institution: user.faculty.institution,
+        role: user.faculty.role,
+        expertise: user.faculty.expertise,
+        course: user.faculty.course,
+        mentoring: user.faculty.mentoring,
+        description: user.faculty.description,
+      };
+    } else if (user.userRole === "OTHER" && user.other) {
+      roleData = {
+        role: user.other.role,
+        workplace: user.other.workplace,
+        description: user.other.description,
+      };
+    }
+
+    // Merge base user data with role-specific data
+    req.user = {
+      ...user,
+      ...roleData,
+    };
+
     next();
   } catch (err: any) {
     console.error("JWT verification error:", err.message);

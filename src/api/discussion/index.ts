@@ -26,7 +26,7 @@ router.get("/:ideaId/comments", async (req, res) => {
   const comments = await prisma.comment.findMany({
     where: { ideaId },
     orderBy: { createdAt: "asc" },
-    include: { user: { select: { id: true, name: true, email: true } } },
+    include: { author: { select: { id: true, name: true, email: true } } }, // Changed from user to author
   });
   res.json(comments);
 });
@@ -40,7 +40,7 @@ authenticatedRouter.post("/:ideaId/comments", async (req: AuthRequest, res) => {
     data: {
       content,
       ideaId,
-      userId: req.user!.id, // Non-null assertion since middleware guarantees this
+      authorId: req.user!.id, // Changed from userId to authorId
     },
   });
   res.status(201).json(comment);
@@ -54,7 +54,12 @@ authenticatedRouter.post("/:ideaId/likes", async (req: AuthRequest, res) => {
 
   if (action === "like") {
     const like = await prisma.like.upsert({
-      where: { userId_ideaId: { userId, ideaId } },
+      where: { 
+        userId_ideaId: {  // This is correct based on the schema's unique constraint order
+          userId,
+          ideaId
+        }
+      },
       update: {},
       create: { userId, ideaId },
     });
@@ -72,9 +77,14 @@ authenticatedRouter.post("/:ideaId/likes", async (req: AuthRequest, res) => {
 // Check if user liked the idea - requires authentication
 authenticatedRouter.get("/:ideaId/likes/check", async (req: AuthRequest, res) => {
   const { ideaId } = req.params;
-  const userId = req.user!.id; // Non-null assertion since middleware guarantees this
+  const userId = req.user!.id;
   const like = await prisma.like.findUnique({
-    where: { userId_ideaId: { userId, ideaId } },
+    where: { 
+      userId_ideaId: {  // Fix: use the correct compound key format
+        userId,
+        ideaId
+      }
+    },
   });
   res.json({ hasLiked: !!like });
 });
@@ -92,13 +102,18 @@ authenticatedRouter.get("/:ideaId/comments/liked", async (req: AuthRequest, res)
 
 // Add route for liking/unliking a specific comment to match frontend
 authenticatedRouter.post("/:ideaId/comments/:commentId/likes", async (req: AuthRequest, res) => {
-  const { ideaId, commentId } = req.params;
-  const { action } = req.body; // expect 'like' or 'unlike'
+  const { commentId } = req.params;
+  const { action } = req.body;
   const userId = req.user!.id;
 
   if (action === "like") {
     await prisma.like.upsert({
-      where: { userId_commentId: { userId, commentId } },
+      where: { 
+        userId_commentId: {  // Fix: use the correct compound key format
+          userId,
+          commentId
+        }
+      },
       update: {},
       create: { userId, commentId },
     });

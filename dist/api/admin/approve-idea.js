@@ -31,32 +31,47 @@ router.get("/", async (req, res) => {
                         name: true,
                         email: true,
                         country: true,
-                        institution: true,
+                        userRole: true,
+                        // Include role-specific tables for institution data
+                        innovator: true,
+                        faculty: true,
+                        mentor: true,
+                        other: true
                     }
                 }
             },
             orderBy: { createdAt: "desc" },
         });
         // Map submissions to match the expected frontend format
-        const formattedSubmissions = submissions.map((submission) => ({
-            id: submission.id,
-            title: submission.title,
-            ideaCaption: submission.caption || "",
-            description: submission.description,
-            odrExperience: submission.priorOdrExperience || "",
-            consent: true, // Assuming consent is implied in your system
-            approved: false, // Not approved yet
-            createdAt: submission.createdAt.toISOString(),
-            userId: submission.ownerId,
-            user: {
-                id: submission.owner.id,
-                name: submission.owner.name,
-                email: submission.owner.email,
-                country: submission.owner.country,
-                institution: submission.owner.institution,
-                userType: submission.owner.institution ? "student" : "professional" // Inferred from data
+        const formattedSubmissions = submissions.map((submission) => {
+            // Get institution from the appropriate role-specific model
+            let institution = null;
+            if (submission.owner.userRole === "INNOVATOR" && submission.owner.innovator) {
+                institution = submission.owner.innovator.institution;
             }
-        }));
+            else if (submission.owner.userRole === "FACULTY" && submission.owner.faculty) {
+                institution = submission.owner.faculty.institution;
+            }
+            return {
+                id: submission.id,
+                title: submission.title,
+                ideaCaption: submission.caption || "",
+                description: submission.description,
+                odrExperience: submission.priorOdrExperience || "",
+                consent: true, // Assuming consent is implied in your system
+                approved: false, // Not approved yet
+                createdAt: submission.createdAt.toISOString(),
+                userId: submission.ownerId,
+                user: {
+                    id: submission.owner.id,
+                    name: submission.owner.name,
+                    email: submission.owner.email,
+                    country: submission.owner.country,
+                    institution: institution,
+                    userType: institution ? "student" : "professional" // Inferred from data
+                }
+            };
+        });
         res.json(formattedSubmissions);
     }
     catch (error) {
@@ -82,17 +97,18 @@ router.post("/", async (req, res) => {
         if (submission.reviewed) {
             return res.status(400).json({ error: "Idea has already been reviewed" });
         }
-        // Create a new Idea from the submission data
+        // Create a new Idea from the submission data (only using fields that exist in the Idea model)
         const idea = await prisma_1.default.idea.create({
             data: {
                 title: submission.title,
                 caption: submission.caption,
                 description: submission.description,
-                priorOdrExperience: submission.priorOdrExperience,
                 approved: true,
-                reviewedAt: new Date(),
-                reviewedBy: req.user?.id, // Safe access with optional chaining
                 ownerId: submission.ownerId,
+                // Remove fields that don't exist in the Idea model according to the schema
+                // priorOdrExperience: submission.priorOdrExperience,
+                // reviewedAt: new Date(),
+                // reviewedBy: req.user?.id,
             }
         });
         // Mark the submission as reviewed and approved
