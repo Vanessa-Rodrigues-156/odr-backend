@@ -102,17 +102,17 @@ authenticatedRouter.post("/:ideaId/join-collaborator", async (req: AuthRequest, 
   const userId = req.user!.id; // Non-null assertion is safe due to middleware
   
   try {
-    // Check if user is already a collaborator - use consistent key format based on schema
-    const existingCollab = await prisma.ideaCollaborator.findUnique({
+    // Check if user is already a collaborator
+    const existingCollaboration = await prisma.ideaCollaborator.findFirst({
       where: {
-        ideaId_userId: { 
-          ideaId: ideaId,
-          userId: userId
-        }
+        AND: [
+          { ideaId: ideaId },
+          { userId: userId }
+        ]
       }
     });
     
-    if (existingCollab) {
+    if (existingCollaboration) {
       return res.status(400).json({ error: "You are already a collaborator for this idea" });
     }
     
@@ -151,16 +151,29 @@ authenticatedRouter.post("/:ideaId/join-collaborator", async (req: AuthRequest, 
 // Leave as collaborator - requires authentication
 authenticatedRouter.delete("/:ideaId/leave-collaborator", async (req: AuthRequest, res) => {
   const { ideaId } = req.params;
-  const userId = req.user!.id; // Non-null assertion is safe due to middleware
+  const userId = req.user!.id;
   
   try {
-    // Delete the collaborator record using the compound unique constraint with correct field order
+    // Delete the collaborator record using a findFirst + delete approach
+    const collaboration = await prisma.ideaCollaborator.findFirst({
+      where: {
+        AND: [
+          { ideaId: ideaId },
+          { userId: userId }
+        ]
+      }
+    });
+    
+    if (!collaboration) {
+      return res.status(404).json({
+        success: false,
+        message: "Collaboration not found"
+      });
+    }
+    
     await prisma.ideaCollaborator.delete({
-      where: { 
-        ideaId_userId: { 
-          ideaId: ideaId,
-          userId: userId
-        }
+      where: {
+        id: collaboration.id
       }
     });
     
@@ -181,13 +194,13 @@ authenticatedRouter.post("/:ideaId/request-mentor", async (req: AuthRequest, res
   const userId = req.user!.id; // Non-null assertion is safe due to middleware
   
   try {
-    // Check if user is already a mentor - use consistent key format based on schema
-    const existingMentor = await prisma.ideaMentor.findUnique({
-      where: { 
-        ideaId_userId: { 
-          ideaId: ideaId,
-          userId: userId
-        }
+    // Check if user is already a mentor
+    const existingMentor = await prisma.ideaMentor.findFirst({
+      where: {
+        AND: [
+          { ideaId: ideaId },
+          { userId: userId }
+        ]
       }
     });
     
@@ -230,16 +243,29 @@ authenticatedRouter.post("/:ideaId/request-mentor", async (req: AuthRequest, res
 // Leave as mentor - requires authentication
 authenticatedRouter.delete("/:ideaId/leave-mentor", async (req: AuthRequest, res) => {
   const { ideaId } = req.params;
-  const userId = req.user!.id; // Non-null assertion is safe due to middleware
+  const userId = req.user!.id;
   
   try {
-    // Delete the mentor record using the compound unique constraint with correct field order
+    // Delete the mentor record using a findFirst + delete approach
+    const mentor = await prisma.ideaMentor.findFirst({
+      where: {
+        AND: [
+          { ideaId: ideaId },
+          { userId: userId }
+        ]
+      }
+    });
+    
+    if (!mentor) {
+      return res.status(404).json({
+        success: false,
+        message: "Mentorship not found"
+      });
+    }
+    
     await prisma.ideaMentor.delete({
-      where: { 
-        ideaId_userId: { 
-          ideaId: ideaId,
-          userId: userId
-        }
+      where: {
+        id: mentor.id
       }
     });
     

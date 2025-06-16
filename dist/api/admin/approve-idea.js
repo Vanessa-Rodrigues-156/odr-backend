@@ -86,49 +86,69 @@ router.post("/", async (req, res) => {
         if (!ideaId) {
             return res.status(400).json({ error: "Idea ID is required" });
         }
-        // Get the submission
-        const submission = await prisma_1.default.ideaSubmission.findUnique({
-            where: { id: ideaId },
-            include: { owner: true }
-        });
-        if (!submission) {
-            return res.status(404).json({ error: "Idea submission not found" });
-        }
-        if (submission.reviewed) {
-            return res.status(400).json({ error: "Idea has already been reviewed" });
-        }
-        // Create a new Idea from the submission data (only using fields that exist in the Idea model)
-        const idea = await prisma_1.default.idea.create({
-            data: {
-                title: submission.title,
-                caption: submission.caption,
-                description: submission.description,
-                approved: true,
-                ownerId: submission.ownerId,
-                // Remove fields that don't exist in the Idea model according to the schema
-                // priorOdrExperience: submission.priorOdrExperience,
-                // reviewedAt: new Date(),
-                // reviewedBy: req.user?.id,
+        console.log(`[Admin] Processing approval for idea: ${ideaId}`);
+        // Use a transaction to ensure consistency
+        const result = await prisma_1.default.$transaction(async (tx) => {
+            // Get the submission
+            const submission = await tx.ideaSubmission.findUnique({
+                where: { id: ideaId },
+                include: { owner: true }
+            });
+            if (!submission) {
+                throw new Error(`Idea submission with ID ${ideaId} not found`);
             }
-        });
-        // Mark the submission as reviewed and approved
-        await prisma_1.default.ideaSubmission.update({
-            where: { id: ideaId },
-            data: {
-                reviewed: true,
-                approved: true,
-                reviewedAt: new Date(),
-                reviewedBy: req.user?.id // Safe access with optional chaining
+            if (submission.reviewed) {
+                throw new Error(`Idea with ID ${ideaId} has already been reviewed`);
             }
+            // Validate required fields
+            if (!submission.title) {
+                throw new Error("Submission title is required");
+            }
+            // Create a new Idea from the submission data
+            const idea = await tx.idea.create({
+                data: {
+                    title: submission.title,
+                    caption: submission.caption || "", // Provide fallback for nullable fields
+                    description: submission.description || "",
+                    approved: true,
+                    ownerId: submission.ownerId,
+                }
+            });
+            // Mark the submission as reviewed and approved
+            const updatedSubmission = await tx.ideaSubmission.update({
+                where: { id: ideaId },
+                data: {
+                    reviewed: true,
+                    approved: true,
+                    reviewedAt: new Date(),
+                    reviewedBy: req.user?.id || null // Handle null case
+                }
+            });
+            return { idea, updatedSubmission };
         });
+        console.log(`[Admin] Successfully approved idea: ${ideaId}`);
         res.status(201).json({
             success: true,
-            idea
+            idea: result.idea
         });
     }
     catch (error) {
-        console.error("[Admin] Error approving idea:", error);
-        res.status(500).json({ error: "Failed to approve idea" });
+        // Better error handling
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        console.error(`[Admin] Error approving idea: ${errorMessage}`);
+        console.error(error); // Log the full error object for debugging
+        // Determine appropriate status code based on error
+        let statusCode = 500;
+        if (errorMessage.includes("not found")) {
+            statusCode = 404;
+        }
+        else if (errorMessage.includes("already been reviewed")) {
+            statusCode = 400;
+        }
+        res.status(statusCode).json({
+            error: "Failed to approve idea",
+            details: errorMessage
+        });
     }
 });
 exports.default = router;

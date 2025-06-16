@@ -52,24 +52,37 @@ router.get("/", async (req, res) => {
         });
         // Process the data to flatten it and make it more convenient for frontend use
         const processedMentors = mentors.map(mentor => {
-            // Extract the mentor-specific data
-            const mentorSpecificData = mentor.mentor || {};
-            // Extract the ideas this user mentors
-            const mentoringIdeas = mentor.ideaMentors.map(relationship => ({
-                role: relationship.role,
-                idea: relationship.idea
-            }));
+            // Extract the mentor-specific data - ensure it's always an object even if null
+            const mentorSpecificData = mentor.mentor || {
+                mentorType: null,
+                organization: null,
+                role: null,
+                expertise: null,
+                description: null
+            };
+            // Extract the ideas this user mentors - with safer handling
+            const mentoringIdeas = Array.isArray(mentor.ideaMentors)
+                ? mentor.ideaMentors.map(relationship => ({
+                    role: relationship.role || 'Mentor',
+                    idea: relationship.idea
+                }))
+                : [];
             // Return flattened structure
             return {
                 id: mentor.id,
-                name: mentor.name,
-                email: mentor.email,
-                contactNumber: mentor.contactNumber,
-                city: mentor.city,
-                country: mentor.country,
+                name: mentor.name || 'Unnamed Mentor',
+                email: mentor.email || '',
+                contactNumber: mentor.contactNumber || '',
+                city: mentor.city || '',
+                country: mentor.country || '',
                 createdAt: mentor.createdAt,
-                // Add mentor-specific fields
-                ...mentorSpecificData,
+                // Add mentor-specific fields with defaults
+                mentorType: mentorSpecificData.mentorType || null,
+                organization: mentorSpecificData.organization || null,
+                institution: mentorSpecificData.organization || null, // Added for frontend compatibility
+                role: mentorSpecificData.role || null,
+                expertise: mentorSpecificData.expertise || null,
+                description: mentorSpecificData.description || null,
                 // Add mentored ideas
                 mentoringIdeas
             };
@@ -78,7 +91,7 @@ router.get("/", async (req, res) => {
     }
     catch (error) {
         console.error("Error fetching mentors:", error);
-        res.status(500).json({ error: "Failed to fetch mentors" });
+        res.status(500).json({ error: "Failed to fetch mentors", details: error instanceof Error ? error.message : "Unknown error" });
     }
 });
 // Get specific mentor by ID with their ideas
@@ -116,32 +129,35 @@ router.get("/:id", async (req, res) => {
         if (!mentor) {
             return res.status(404).json({ error: "Mentor not found" });
         }
-        // Process data to flatten the structure
+        // Process data to flatten the structure with better null handling
         const mentorData = {
             id: mentor.id,
-            name: mentor.name,
-            email: mentor.email,
-            contactNumber: mentor.contactNumber,
-            city: mentor.city,
-            country: mentor.country,
+            name: mentor.name || 'Unnamed Mentor',
+            email: mentor.email || '',
+            contactNumber: mentor.contactNumber || '',
+            city: mentor.city || '',
+            country: mentor.country || '',
             createdAt: mentor.createdAt,
-            // Add mentor-specific fields
-            mentorType: mentor.mentor?.mentorType,
-            organization: mentor.mentor?.organization,
-            role: mentor.mentor?.role,
-            expertise: mentor.mentor?.expertise,
-            description: mentor.mentor?.description,
-            // Add mentored ideas
-            mentoringIdeas: mentor.ideaMentors.map(relationship => ({
-                role: relationship.role,
-                idea: relationship.idea
-            }))
+            // Add mentor-specific fields with null safety
+            mentorType: mentor.mentor?.mentorType || null,
+            organization: mentor.mentor?.organization || null,
+            institution: mentor.mentor?.organization || null, // Added for frontend compatibility
+            role: mentor.mentor?.role || null,
+            expertise: mentor.mentor?.expertise || null,
+            description: mentor.mentor?.description || null,
+            // Add mentored ideas with safety checks
+            mentoringIdeas: Array.isArray(mentor.ideaMentors)
+                ? mentor.ideaMentors.map(relationship => ({
+                    role: relationship.role || 'Mentor',
+                    idea: relationship.idea
+                }))
+                : []
         };
         res.json(mentorData);
     }
     catch (error) {
         console.error("Error fetching mentor:", error);
-        res.status(500).json({ error: "Failed to fetch mentor" });
+        res.status(500).json({ error: "Failed to fetch mentor", details: error instanceof Error ? error.message : "Unknown error" });
     }
 });
 exports.default = router;
