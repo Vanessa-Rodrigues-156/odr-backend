@@ -13,10 +13,10 @@ jobs:
     - name: 📦 Checkout code
       uses: actions/checkout@v3
 
-    - name: 🛠️ Write .env from GitHub Secret
+    - name: 🛠️ Write .env.development from GitHub Secret
       run: |
-        echo "${{ secrets.ENV_FILE }}" > .env
-        echo ".env created with $(wc -l < .env) lines"
+        echo "${{ secrets.ENV_FILE }}" > .env.development
+        echo ".env.development created with $(wc -l < .env.development) lines"
 
     - name: 🌀 Install Bun
       run: |
@@ -37,13 +37,13 @@ jobs:
         echo "Root directory:" && ls -la
         echo "dist/ contents:" && ls -la dist || echo "dist/ missing"
         echo "prisma/ contents:" && ls -la prisma || echo "prisma/ missing"
-        cat .env || echo ".env missing"
+        cat .env.development || echo ".env.development missing"
 
     - name: 📦 Prepare deployment archive
       run: |
         mkdir deploy
         cp -r dist prisma deploy/
-        cp .env package.json bun.lock deploy/
+        cp .env.development package.json bun.lock deploy/
         tar -czf backend.tar.gz -C deploy .
 
     - name: 🚀 Upload to EC2
