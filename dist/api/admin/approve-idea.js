@@ -104,6 +104,14 @@ router.post("/", async (req, res) => {
             if (!submission.title) {
                 throw new Error("Submission title is required");
             }
+            // Verify that the owner still exists in the database
+            const ownerExists = await tx.user.findUnique({
+                where: { id: submission.ownerId },
+                select: { id: true }
+            });
+            if (!ownerExists) {
+                throw new Error(`User with ID ${submission.ownerId} not found. Cannot create idea with non-existent owner.`);
+            }
             // Create a new Idea from the submission data
             const idea = await tx.idea.create({
                 data: {
@@ -144,6 +152,16 @@ router.post("/", async (req, res) => {
         }
         else if (errorMessage.includes("already been reviewed")) {
             statusCode = 400;
+        }
+        // Handle foreign key constraint violations
+        if (typeof error === 'object' && error !== null && 'code' in error) {
+            const prismaError = error;
+            if (prismaError.code === 'P2003') {
+                return res.status(400).json({
+                    error: "Foreign key constraint violation. The owner of this idea no longer exists in the database.",
+                    details: errorMessage
+                });
+            }
         }
         res.status(statusCode).json({
             error: "Failed to approve idea",

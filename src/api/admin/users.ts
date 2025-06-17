@@ -287,8 +287,74 @@ router.put("/:id", requireAdmin, async (req: AuthRequest, res: Response) => {
 
 // Delete user
 router.delete("/:id", requireAdmin, async (req: AuthRequest, res: Response) => {
-  await prisma.user.delete({ where: { id: req.params.id } });
-  res.json({ success: true });
+  const userId = req.params.id;
+  
+  try {
+    console.log(`[Admin] Attempting to delete user with ID: ${userId}`);
+    
+    // Use a transaction to ensure all operations succeed or fail together
+    await prisma.$transaction(async (tx) => {
+      // First check if the user exists
+      const userExists = await tx.user.findUnique({
+        where: { id: userId },
+        select: { id: true }
+      });
+      
+      if (!userExists) {
+        throw new Error(`User with ID ${userId} not found`);
+      }
+      
+      // Handle ideas owned by this user - either reassign or delete them
+      const userIdeas = await tx.idea.findMany({
+        where: { ownerId: userId },
+        select: { id: true }
+      });
+      
+      if (userIdeas.length > 0) {
+        console.log(`[Admin] Found ${userIdeas.length} ideas owned by user ${userId}. Deleting these first.`);
+        
+        // Delete all ideas owned by the user
+        await tx.idea.deleteMany({
+          where: { ownerId: userId }
+        });
+      }
+      
+      // Handle idea submissions by this user
+      await tx.ideaSubmission.deleteMany({
+        where: { ownerId: userId }
+      });
+      
+      // Now that related records are handled, delete the user
+      await tx.user.delete({ 
+        where: { id: userId } 
+      });
+    });
+    
+    console.log(`[Admin] Successfully deleted user with ID: ${userId}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error(`[Admin] Error deleting user:`, error);
+    
+    // Provide better error messages for specific error cases
+    if (error instanceof Error) {
+      if (error.message.includes('not found')) {
+        return res.status(404).json({ error: error.message });
+      }
+      
+      // Check for foreign key constraint errors
+      if ('code' in error && error.code === 'P2003') {
+        return res.status(400).json({ 
+          error: "Cannot delete user because they have associated records. Try reassigning or deleting those records first.",
+          details: error.message
+        });
+      }
+    }
+    
+    res.status(500).json({ 
+      error: "Failed to delete user", 
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
 });
 
 // Get user by email (for testing password)

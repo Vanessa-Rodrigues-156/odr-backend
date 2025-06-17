@@ -4,6 +4,7 @@ import prisma from "../../lib/prisma";
 import usersRoutes from "./users";
 import analyticsRoutes from "./analytics";
 import approveIdeaRoutes from "./approve-idea";
+import approveMentorRoutes from "./approve-mentor";
 
 const router = Router();
 router.use(authenticateJWT);
@@ -133,8 +134,13 @@ router.post("/reject-idea", requireAdmin, async (req: AuthRequest, res) => {
   }
 });
 
+// Mount all routes
 router.use("/users", usersRoutes);
 router.use("/analytics", analyticsRoutes);
 router.use("/approve-idea", approveIdeaRoutes);
+
+// Debug logging for approveMentorRoutes
+console.log("[Setup] Mounting approveMentorRoutes at /approve-mentor");
+router.use("/approve-mentor", approveMentorRoutes);
 
 export default router;

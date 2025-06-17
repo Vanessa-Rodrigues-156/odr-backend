@@ -9,6 +9,7 @@ const prisma_1 = __importDefault(require("../../lib/prisma"));
 const users_1 = __importDefault(require("./users"));
 const analytics_1 = __importDefault(require("./analytics"));
 const approve_idea_1 = __importDefault(require("./approve-idea"));
+const approve_mentor_1 = __importDefault(require("./approve-mentor"));
 const router = (0, express_1.Router)();
 router.use(auth_1.authenticateJWT);
 // Middleware to check for ADMIN role
@@ -123,7 +124,11 @@ router.post("/reject-idea", requireAdmin, async (req, res) => {
         res.status(500).json({ error: "Failed to reject idea. Please try again." });
     }
 });
+// Mount all routes
 router.use("/users", users_1.default);
 router.use("/analytics", analytics_1.default);
 router.use("/approve-idea", approve_idea_1.default);
+// Debug logging for approveMentorRoutes
+console.log("[Setup] Mounting approveMentorRoutes at /approve-mentor");
+router.use("/approve-mentor", approve_mentor_1.default);
 exports.default = router;
