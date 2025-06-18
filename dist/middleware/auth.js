@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.authenticateJWT = void 0;
+exports.generateToken = exports.authenticateJWT = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const authenticateJWT = async (req, res, next) => {
@@ -115,3 +115,21 @@ const authenticateJWT = async (req, res, next) => {
     }
 };
 exports.authenticateJWT = authenticateJWT;
+const generateToken = async (user) => {
+    // Check if the user is a mentor and get their approval status
+    let isMentorApproved = false;
+    let mentorRejectionReason = null;
+    if (user.userRole === "MENTOR" && user.mentor) {
+        isMentorApproved = !!user.mentor.approved;
+        // Include rejection reason if present
+        mentorRejectionReason = user.mentor.rejectionReason || null;
+    }
+    return jsonwebtoken_1.default.sign({
+        id: user.id,
+        email: user.email,
+        userRole: user.userRole,
+        isMentorApproved,
+        mentorRejectionReason, // Include rejection reason if application was rejected
+    }, process.env.JWT_SECRET || "your-secret-key", { expiresIn: "24h" });
+};
+exports.generateToken = generateToken;

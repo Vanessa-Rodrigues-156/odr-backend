@@ -17,6 +17,8 @@ const admin_1 = __importDefault(require("./api/admin"));
 const collaboration_1 = __importDefault(require("./api/collaboration"));
 const chat_1 = __importDefault(require("./api/chat"));
 const mentors_1 = __importDefault(require("./api/mentors"));
+// Import the user routes
+const user_1 = __importDefault(require("./api/user"));
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
     origin: [
@@ -59,5 +61,7 @@ app.use("/api/submit-idea", auth_2.authenticateJWT, submit_idea_1.default);
 app.use("/api/admin", auth_2.authenticateJWT, admin_1.default);
 app.use("/api/collaboration", auth_2.authenticateJWT, collaboration_1.default);
 app.use("/api/mentors", auth_2.authenticateJWT, mentors_1.default);
+// Add the user routes
+app.use("/api/user", user_1.default);
 app.use(errorHandler_1.default);
 exports.default = app;

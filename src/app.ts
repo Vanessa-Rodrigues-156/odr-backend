@@ -12,6 +12,8 @@ import adminRoutes from "./api/admin";
 import collaborationRoutes from "./api/collaboration";
 import chatbotRoutes from "./api/chat";
 import mentorsRoutes from "./api/mentors";
+// Import the user routes
+import userRoutes from "./api/user";
 
 const app = express();
 
@@ -63,6 +65,8 @@ app.use("/api/submit-idea", authenticateJWT, submitIdeaRoutes);
 app.use("/api/admin", authenticateJWT, adminRoutes);
 app.use("/api/collaboration", authenticateJWT, collaborationRoutes);
 app.use("/api/mentors", authenticateJWT, mentorsRoutes);
+// Add the user routes
+app.use("/api/user", userRoutes);
 
 app.use(errorHandler);
 

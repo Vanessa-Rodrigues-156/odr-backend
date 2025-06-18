@@ -74,6 +74,10 @@ model Mentor {
   role         String?
   expertise    String?
   description  String?
+  approved     Boolean    @default(false)
+  reviewedAt   DateTime?
+  reviewedBy   String?
+  rejectionReason String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
