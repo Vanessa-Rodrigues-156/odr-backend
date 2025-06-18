@@ -179,14 +179,40 @@ router.post("/reject", async (req: AuthRequest, res) => {
         }
       });
 
-      return { user, mentor: updatedMentor };
+      // Change user role from MENTOR to OTHER
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: {
+          userRole: "OTHER"  // Demote to OTHER role
+        }
+      });
+
+      // Create entry in "other" table with mentor data to preserve information
+      // Check if entry exists first
+      const existingOther = await tx.other.findUnique({
+        where: { userId: userId }
+      });
+
+      // Only create if doesn't exist
+      if (!existingOther) {
+        await tx.other.create({
+          data: {
+            userId: userId,
+            role: user.mentor.mentorType ? `Former ${user.mentor.mentorType} mentor applicant` : "Former mentor applicant",
+            workplace: user.mentor.organization || "",
+            description: `Mentor application rejected: ${reason || "No reason provided"}`
+          }
+        });
+      }
+
+      return { user: updatedUser, mentor: updatedMentor };
     });
 
-    console.log(`[Admin] Successfully rejected mentor: ${userId}`);
+    console.log(`[Admin] Successfully rejected mentor: ${userId} and changed role to OTHER`);
     
     res.status(200).json({
       success: true,
-      message: "Mentor application has been rejected"
+      message: "Mentor application has been rejected and user role updated"
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";

@@ -118,14 +118,18 @@ exports.authenticateJWT = authenticateJWT;
 const generateToken = async (user) => {
     // Check if the user is a mentor and get their approval status
     let isMentorApproved = false;
+    let mentorRejectionReason = null;
     if (user.userRole === "MENTOR" && user.mentor) {
         isMentorApproved = !!user.mentor.approved;
+        // Include rejection reason if present
+        mentorRejectionReason = user.mentor.rejectionReason || null;
     }
     return jsonwebtoken_1.default.sign({
         id: user.id,
         email: user.email,
         userRole: user.userRole,
-        isMentorApproved, // Include in the token
+        isMentorApproved,
+        mentorRejectionReason, // Include rejection reason if application was rejected
     }, process.env.JWT_SECRET || "your-secret-key", { expiresIn: "24h" });
 };
 exports.generateToken = generateToken;
