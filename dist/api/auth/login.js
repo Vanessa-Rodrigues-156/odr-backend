@@ -119,12 +119,25 @@ async function loginHandler(req, res) {
             console.error("JWT_SECRET is not configured!");
             return res.status(500).json({ error: "Server configuration error" });
         }
+        // Check for mentor application status
+        const hasMentorApplication = !!user.mentor;
+        const isMentorApproved = user.mentor ? user.mentor.approved : false;
+        const mentorRejectionReason = user.mentor ? user.mentor.rejectionReason : null;
+        // Redefine userResponse with the mentor status information
+        const userResponseWithMentorStatus = {
+            ...userResponse,
+            hasMentorApplication,
+            isMentorApproved,
+            mentorRejectionReason
+        };
         // Create JWT token with user data
         try {
             const token = jsonwebtoken_1.default.sign({
                 id: user.id,
                 email: user.email,
-                userRole: user.userRole
+                userRole: user.userRole,
+                hasMentorApplication,
+                isMentorApproved
             }, jwtSecret, {
                 expiresIn: "7d",
                 algorithm: "HS256"
@@ -132,7 +145,7 @@ async function loginHandler(req, res) {
             console.log(`Login successful for user: ${normalizedEmail} with role: ${user.userRole}`);
             // Return user data and token
             return res.status(200).json({
-                user: userResponse,
+                user: userResponseWithMentorStatus,
                 token,
                 message: "Login successful"
             });

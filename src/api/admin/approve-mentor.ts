@@ -23,8 +23,7 @@ router.get("/", async (req: AuthRequest, res) => {
     console.log("[Admin] Fetching pending mentors for approval");
     
     const pendingMentors = await prisma.user.findMany({
-      where: { 
-        userRole: "MENTOR",
+      where: {
         mentor: {
           approved: false
         }
@@ -74,11 +73,10 @@ router.post("/", async (req: AuthRequest, res) => {
 
     // Use a transaction to ensure consistency
     const result = await prisma.$transaction(async (tx) => {
-      // Find the user with mentor role
+      // Find the user who has applied for mentor status
       const user = await tx.user.findUnique({
         where: { 
-          id: userId,
-          userRole: "MENTOR" 
+          id: userId
         },
         include: { mentor: true }
       });
@@ -104,8 +102,24 @@ router.post("/", async (req: AuthRequest, res) => {
           reviewedBy: req.user?.id,
         }
       });
+      
+      // Change user role from OTHER to MENTOR
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: {
+          userRole: "MENTOR"  // Promote to MENTOR role
+        }
+      });
+      
+      // Remove entry from "other" table as they're now a mentor
+      await tx.other.deleteMany({
+        where: { userId: userId }
+      }).catch(err => {
+        console.warn("Could not delete from 'other' table", err);
+        // Continue with the process even if this fails
+      });
 
-      return { user, mentor: updatedMentor };
+      return { user: updatedUser, mentor: updatedMentor };
     });
 
     console.log(`[Admin] Successfully approved mentor: ${userId}`);

@@ -1,0 +1,1 @@
+{"name": "test", "email": "test@example.com", "password": "password123", "contactNumber": "+1234567890", "city": "Test City", "country": "Test Country", "userRole": "MENTOR", "mentorApproved": false, "mentorType": "tech", "mainUserType": "mentor", "userType": "tech"}

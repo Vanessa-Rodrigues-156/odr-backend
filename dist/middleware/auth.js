@@ -96,10 +96,29 @@ const authenticateJWT = async (req, res, next) => {
                 description: user.other.description,
             };
         }
-        // Merge base user data with role-specific data
+        // Check for mentor application status - this is important for showing pending status
+        let hasMentorApplication = false;
+        let isMentorApproved = false;
+        let mentorRejectionReason = null;
+        // If user is already a MENTOR, they're approved
+        if (user.userRole === "MENTOR" && user.mentor) {
+            hasMentorApplication = true;
+            isMentorApproved = user.mentor.approved;
+            mentorRejectionReason = user.mentor.rejectionReason;
+        }
+        // If user is OTHER but has a mentor record, they have a pending application
+        else if (user.userRole === "OTHER" && user.mentor) {
+            hasMentorApplication = true;
+            isMentorApproved = user.mentor.approved;
+            mentorRejectionReason = user.mentor.rejectionReason;
+        }
+        // Merge base user data with role-specific data and mentor status
         req.user = {
             ...user,
             ...roleData,
+            hasMentorApplication,
+            isMentorApproved,
+            mentorRejectionReason
         };
         next();
     }
@@ -116,10 +135,12 @@ const authenticateJWT = async (req, res, next) => {
 };
 exports.authenticateJWT = authenticateJWT;
 const generateToken = async (user) => {
-    // Check if the user is a mentor and get their approval status
+    // Check if the user has applied for mentor (regardless of current role) and get approval status
     let isMentorApproved = false;
     let mentorRejectionReason = null;
-    if (user.userRole === "MENTOR" && user.mentor) {
+    let hasMentorApplication = false;
+    if (user.mentor) {
+        hasMentorApplication = true;
         isMentorApproved = !!user.mentor.approved;
         // Include rejection reason if present
         mentorRejectionReason = user.mentor.rejectionReason || null;
@@ -128,6 +149,7 @@ const generateToken = async (user) => {
         id: user.id,
         email: user.email,
         userRole: user.userRole,
+        hasMentorApplication,
         isMentorApproved,
         mentorRejectionReason, // Include rejection reason if application was rejected
     }, process.env.JWT_SECRET || "your-secret-key", { expiresIn: "24h" });

@@ -126,13 +126,28 @@ export default async function loginHandler(req: Request, res: Response) {
       return res.status(500).json({ error: "Server configuration error" });
     }
 
+    // Check for mentor application status
+    const hasMentorApplication = !!user.mentor;
+    const isMentorApproved = user.mentor ? user.mentor.approved : false;
+    const mentorRejectionReason = user.mentor ? user.mentor.rejectionReason : null;
+
+    // Redefine userResponse with the mentor status information
+    const userResponseWithMentorStatus = {
+      ...userResponse,
+      hasMentorApplication,
+      isMentorApproved,
+      mentorRejectionReason
+    };
+
     // Create JWT token with user data
     try {
       const token = jwt.sign(
         { 
           id: user.id, 
           email: user.email, 
-          userRole: user.userRole 
+          userRole: user.userRole,
+          hasMentorApplication,
+          isMentorApproved
         },
         jwtSecret,
         { 
@@ -145,7 +160,7 @@ export default async function loginHandler(req: Request, res: Response) {
       
       // Return user data and token
       return res.status(200).json({ 
-        user: userResponse, 
+        user: userResponseWithMentorStatus, 
         token,
         message: "Login successful" 
       });
