@@ -188,9 +188,13 @@ authenticatedRouter.post("/:ideaId/request-mentor", async (req, res) => {
         if (existingMentor) {
             return res.status(400).json({ error: "You are already a mentor for this idea" });
         }
-        // Check if user has MENTOR role
+        // Check if user has MENTOR role and is approved
         if (req.user.userRole !== 'MENTOR') {
             return res.status(403).json({ error: "Only users with MENTOR role can become mentors" });
+        }
+        // Check if mentor is approved
+        if (!req.user?.isMentorApproved) {
+            return res.status(403).json({ error: "Your mentor application is still pending approval" });
         }
         // Check if idea exists and is approved
         const idea = await prisma_1.default.idea.findUnique({

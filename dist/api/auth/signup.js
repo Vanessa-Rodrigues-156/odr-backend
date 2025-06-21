@@ -36,21 +36,20 @@ async function signupHandler(req, res) {
         // Hash password
         const hashedPassword = await bcryptjs_1.default.hash(password, 10);
         // Determine the correct user role
-        let finalUserRole = userRole;
-        if (!finalUserRole) {
-            if (userType === "student" || mainUserType === "student") {
-                finalUserRole = "INNOVATOR";
-            }
-            else if (userType === "faculty" || mainUserType === "faculty") {
-                finalUserRole = "FACULTY";
-            }
-            else if (userType === "tech" || userType === "law" || userType === "odr" || userType === "conflict" ||
-                mainUserType === "mentor" || mentorType) {
-                finalUserRole = "MENTOR";
-            }
-            else {
-                finalUserRole = "OTHER";
-            }
+        let finalUserRole;
+        // For mentor types, always set to OTHER initially regardless of what was passed
+        if ((userType === "tech" || userType === "law" || userType === "odr" || userType === "conflict" ||
+            mainUserType === "mentor" || mentorType)) {
+            finalUserRole = "OTHER"; // Register as OTHER first, will be changed to MENTOR upon approval
+        }
+        else if (userType === "student" || mainUserType === "student") {
+            finalUserRole = "INNOVATOR";
+        }
+        else if (userType === "faculty" || mainUserType === "faculty") {
+            finalUserRole = "FACULTY";
+        }
+        else {
+            finalUserRole = userRole || "OTHER";
         }
         // Create user using Prisma transaction to ensure data consistency across tables
         const user = await prisma_1.default.$transaction(async (tx) => {
@@ -80,46 +79,73 @@ async function signupHandler(req, res) {
                         }
                     });
                     break;
-                case "MENTOR":
-                    // Determine mentor type from form data
-                    let finalMentorType;
-                    if (mentorType === "tech" || userType === "tech") {
-                        finalMentorType = "TECHNICAL_EXPERT";
-                    }
-                    else if (mentorType === "law" || userType === "law") {
-                        finalMentorType = "LEGAL_EXPERT";
-                    }
-                    else if (mentorType === "odr" || userType === "odr") {
-                        finalMentorType = "ODR_EXPERT";
-                    }
-                    else if (mentorType === "conflict" || userType === "conflict") {
-                        finalMentorType = "CONFLICT_RESOLUTION_EXPERT";
-                    }
-                    else {
-                        finalMentorType = "TECHNICAL_EXPERT"; // Default
-                    }
-                    // Determine organization based on mentor type
-                    let organization = "";
-                    let role = "";
-                    if (finalMentorType === "TECHNICAL_EXPERT") {
-                        organization = techOrg || institution || "";
-                        role = techRole || "";
-                    }
-                    else if (finalMentorType === "LEGAL_EXPERT") {
-                        organization = lawFirm || institution || "";
-                    }
-                    else {
-                        organization = institution || "";
-                    }
-                    await tx.mentor.create({
-                        data: {
-                            userId: user.id,
-                            mentorType: finalMentorType,
-                            organization,
-                            role,
-                            description: odrLabUsage || null
+                case "OTHER":
+                    // Check if this user intended to be a mentor (applied as mentor but starting as OTHER)
+                    if (mentorType === "tech" || userType === "tech" || mentorType === "law" || userType === "law" ||
+                        mentorType === "odr" || userType === "odr" || mentorType === "conflict" || userType === "conflict" ||
+                        mainUserType === "mentor") {
+                        // Determine mentor type from form data
+                        let finalMentorType;
+                        if (mentorType === "tech" || userType === "tech") {
+                            finalMentorType = "TECHNICAL_EXPERT";
                         }
-                    });
+                        else if (mentorType === "law" || userType === "law") {
+                            finalMentorType = "LEGAL_EXPERT";
+                        }
+                        else if (mentorType === "odr" || userType === "odr") {
+                            finalMentorType = "ODR_EXPERT";
+                        }
+                        else if (mentorType === "conflict" || userType === "conflict") {
+                            finalMentorType = "CONFLICT_RESOLUTION_EXPERT";
+                        }
+                        else {
+                            finalMentorType = "TECHNICAL_EXPERT"; // Default
+                        }
+                        // Determine organization based on mentor type
+                        let organization = "";
+                        let role = "";
+                        if (finalMentorType === "TECHNICAL_EXPERT") {
+                            organization = techOrg || institution || "";
+                            role = techRole || "";
+                        }
+                        else if (finalMentorType === "LEGAL_EXPERT") {
+                            organization = lawFirm || institution || "";
+                        }
+                        else {
+                            organization = institution || "";
+                        }
+                        // Create both mentor record (pending approval) and other record (current status)
+                        await tx.mentor.create({
+                            data: {
+                                userId: user.id,
+                                mentorType: finalMentorType,
+                                organization,
+                                role,
+                                description: odrLabUsage || null,
+                                approved: false
+                            }
+                        });
+                        // Also create an entry in the "other" table since their current role is OTHER
+                        await tx.other.create({
+                            data: {
+                                userId: user.id,
+                                role: `Pending ${finalMentorType.replace('_', ' ')} approval`,
+                                workplace: organization || null,
+                                description: odrLabUsage || null
+                            }
+                        });
+                    }
+                    else {
+                        // Regular OTHER user
+                        await tx.other.create({
+                            data: {
+                                userId: user.id,
+                                role: otherRole || null,
+                                workplace: otherWorkplace || institution || null,
+                                description: odrLabUsage || null
+                            }
+                        });
+                    }
                     break;
                 case "FACULTY":
                     await tx.faculty.create({

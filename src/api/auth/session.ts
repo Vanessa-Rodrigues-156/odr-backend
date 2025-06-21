@@ -24,6 +24,11 @@ export default async function sessionHandler(req: AuthRequest, res: Response) {
     country: req.user.country,
     createdAt: req.user.createdAt,
     
+    // Include mentor application status flags
+    hasMentorApplication: req.user.hasMentorApplication || false,
+    isMentorApproved: req.user.isMentorApproved || false,
+    mentorRejectionReason: req.user.mentorRejectionReason || null,
+    
     // Include role-specific properties that may have been attached by the middleware
     ...(req.user.institution !== undefined && { institution: req.user.institution }),
     ...(req.user.highestEducation !== undefined && { highestEducation: req.user.highestEducation }),

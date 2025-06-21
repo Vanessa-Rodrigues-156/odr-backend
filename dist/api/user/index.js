@@ -28,11 +28,11 @@ router.post("/apply-mentor", async (req, res) => {
         }
         // Use a transaction for consistent updates
         const result = await prisma_1.default.$transaction(async (tx) => {
-            // Update user's role to MENTOR
+            // Update user's role to OTHER (should remain as OTHER until approved by admin)
             const updatedUser = await tx.user.update({
                 where: { id: userId },
                 data: {
-                    userRole: "MENTOR"
+                    userRole: "OTHER"
                 }
             });
             // Check if mentor record exists
