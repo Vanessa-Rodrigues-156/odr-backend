@@ -32,6 +32,7 @@ router.get("/", async (req, res) => {
                         role: true,
                         expertise: true,
                         description: true,
+                        approved: true,
                     }
                 },
                 // Get ideas where this user is a mentor using ideaMentors relation
@@ -58,7 +59,8 @@ router.get("/", async (req, res) => {
                 organization: null,
                 role: null,
                 expertise: null,
-                description: null
+                description: null,
+                approved: false
             };
             // Extract the ideas this user mentors - with safer handling
             const mentoringIdeas = Array.isArray(mentor.ideaMentors)
@@ -83,6 +85,7 @@ router.get("/", async (req, res) => {
                 role: mentorSpecificData.role || null,
                 expertise: mentorSpecificData.expertise || null,
                 description: mentorSpecificData.description || null,
+                approved: mentorSpecificData.approved || false, // Include approval status
                 // Add mentored ideas
                 mentoringIdeas
             };
@@ -108,8 +111,18 @@ router.get("/:id", async (req, res) => {
                 city: true,
                 country: true,
                 createdAt: true,
-                // Include the mentor-specific data
-                mentor: true,
+                // Include the mentor-specific data with all fields
+                mentor: {
+                    select: {
+                        mentorType: true,
+                        organization: true,
+                        role: true,
+                        expertise: true,
+                        description: true,
+                        approved: true,
+                        reviewedAt: true
+                    }
+                },
                 // Get ideas where this user is a mentor
                 ideaMentors: {
                     include: {
@@ -145,6 +158,7 @@ router.get("/:id", async (req, res) => {
             role: mentor.mentor?.role || null,
             expertise: mentor.mentor?.expertise || null,
             description: mentor.mentor?.description || null,
+            approved: mentor.mentor?.approved || false,
             // Add mentored ideas with safety checks
             mentoringIdeas: Array.isArray(mentor.ideaMentors)
                 ? mentor.ideaMentors.map(relationship => ({
