@@ -10,44 +10,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: 📦 Checkout code
+    - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: 🛠️ Write .env.development from GitHub Secret
+    - name: Write .env.development from GitHub Secret
       run: |
         echo "${{ secrets.ENV_FILE }}" > .env.development
         echo "${{secrets.ENV_File}}"> .env.production
         echo ".env.development created with $(wc -l < .env.development) lines"
 
-    - name: 🌀 Install Bun
+    - name: Install Bun
       run: |
         curl -fsSL https://bun.sh/install | bash
         echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
-    - name: 📚 Install dependencies
+    - name: Install dependencies
       run: bun install
 
-    - name: 🔄 Generate Prisma client
+    - name: Generate Prisma client
       run: bunx prisma generate
 
-    - name: 🏗️ Build TypeScript
+    - name: Build TypeScript
       run: bun run tsc
 
-    - name: 🧪 Debug before packaging
+    - name: Debug before packaging
       run: |
         echo "Root directory:" && ls -la
         echo "dist/ contents:" && ls -la dist || echo "dist/ missing"
         echo "prisma/ contents:" && ls -la prisma || echo "prisma/ missing"
         cat .env.development || echo ".env.development missing"
 
-    - name: 📦 Prepare deployment archive
+    - name: Prepare deployment archive
       run: |
         mkdir deploy
         cp -r dist prisma deploy/
-        cp .env.development package.json bun.lock deploy/
+        cp .env.development .env.production package.json bun.lock deploy/
         tar -czf backend.tar.gz -C deploy .
 
-    - name: 🚀 Upload to EC2
+    - name: Upload to EC2
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.EC2_BACKEND_IP }}
@@ -56,7 +56,7 @@ jobs:
         source: backend.tar.gz
         target: /home/ec2-user/
 
-    - name: 🔄 SSH into EC2 and restart PM2
+    - name: SSH into EC2 and restart PM2
       uses: appleboy/ssh-action@v1.0.0
       with:
         host: ${{ secrets.EC2_BACKEND_IP }}
@@ -65,13 +65,13 @@ jobs:
         script: |
           set -e
           # Install Node.js (required for pm2 and other tools) - Amazon Linux version
-          curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
-          sudo yum install -y nodejs
+          #curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+          #sudo yum install -y nodejs
           # Install PM2 globally
-          sudo npm install -g pm2
+          #sudo npm install -g pm2
           # Install Bun globally
-          curl -fsSL https://bun.sh/install | bash
-          export PATH="$HOME/.bun/bin:$PATH"
+          #curl -fsSL https://bun.sh/install | bash
+          #export PATH="$HOME/.bun/bin:$PATH"
           cd /home/ec2-user
           rm -rf odr-backend
           mkdir odr-backend
