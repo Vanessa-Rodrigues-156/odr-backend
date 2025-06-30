@@ -1,9 +1,14 @@
 import { Router } from "express";
 import { authenticateJWT, AuthRequest } from "../../middleware/auth";
 import prisma from "../../lib/prisma";
+import profileHandler from "./profile";
 
 const router = Router();
 router.use(authenticateJWT);
+
+// Profile routes
+router.get("/profile", profileHandler);
+router.put("/profile", profileHandler);
 
 // API endpoint to apply as mentor (for users who were rejected previously)
 router.post("/apply-mentor", async (req: AuthRequest, res) => {
