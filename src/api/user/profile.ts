@@ -66,8 +66,8 @@ export async function updateUserProfile(req: Request, res: Response) {
       return res.status(400).json({ error: "Name is required" });
     }
 
-    // Validate image URL if provided
-    if (imageAvatar && imageAvatar.trim()) {
+    // Validate image URL if provided and not null
+    if (imageAvatar !== null && imageAvatar !== undefined && imageAvatar.trim()) {
       try {
         new URL(imageAvatar);
         // Check if it's a valid image URL
@@ -99,31 +99,71 @@ export async function updateUserProfile(req: Request, res: Response) {
     }
 
     // Update user profile (base User table fields)
+    const updateData: any = {
+      updatedAt: new Date()
+    };
+    
+    // Only include fields in the update data if they're not null
+    if (name !== null && name !== undefined) {
+      updateData.name = name.trim();
+    }
+    
+    if (imageAvatar !== null && imageAvatar !== undefined) {
+      // If imageAvatar is an empty string after trimming, set it to null
+      // Otherwise use the trimmed value
+      updateData.imageAvatar = imageAvatar.trim() || null;
+    }
+    // If imageAvatar is null or undefined, it's not included in the update at all
+    
+    if (contactNumber !== null && contactNumber !== undefined) {
+      updateData.contactNumber = contactNumber.trim() || null;
+    }
+    
+    if (country !== null && country !== undefined) {
+      updateData.country = country.trim() || null;
+    }
+    
+    if (city !== null && city !== undefined) {
+      updateData.city = city.trim() || null;
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: {
-        name: name.trim(),
-        imageAvatar: imageAvatar?.trim() || null,
-        contactNumber: contactNumber?.trim() || null,
-        country: country?.trim() || null,
-        city: city?.trim() || null,
-        updatedAt: new Date()
-      }
+      data: updateData
     });
 
     // Update role-specific data based on user's role
     if (existingUser.userRole === 'INNOVATOR') {
       if (existingUser.innovator) {
-        await prisma.innovator.update({
-          where: { userId: userId },
-          data: {
-            institution: institution?.trim() || null,
-            highestEducation: highestEducation?.trim() || null,
-            courseName: courseName?.trim() || null,
-            courseStatus: courseStatus?.trim() || null,
-            description: description?.trim() || null
-          }
-        });
+        const innovatorUpdateData: any = {};
+        
+        if (institution !== null && institution !== undefined) {
+          innovatorUpdateData.institution = institution.trim() || null;
+        }
+        
+        if (highestEducation !== null && highestEducation !== undefined) {
+          innovatorUpdateData.highestEducation = highestEducation.trim() || null;
+        }
+        
+        if (courseName !== null && courseName !== undefined) {
+          innovatorUpdateData.courseName = courseName.trim() || null;
+        }
+        
+        if (courseStatus !== null && courseStatus !== undefined) {
+          innovatorUpdateData.courseStatus = courseStatus.trim() || null;
+        }
+        
+        if (description !== null && description !== undefined) {
+          innovatorUpdateData.description = description.trim() || null;
+        }
+        
+        // Only update if there are fields to update
+        if (Object.keys(innovatorUpdateData).length > 0) {
+          await prisma.innovator.update({
+            where: { userId: userId },
+            data: innovatorUpdateData
+          });
+        }
       } else {
         // Create innovator record if it doesn't exist
         await prisma.innovator.create({
@@ -139,15 +179,31 @@ export async function updateUserProfile(req: Request, res: Response) {
       }
     } else if (existingUser.userRole === 'MENTOR') {
       if (existingUser.mentor) {
-        await prisma.mentor.update({
-          where: { userId: userId },
-          data: {
-            organization: organization?.trim() || null,
-            role: role?.trim() || null,
-            expertise: expertise?.trim() || null,
-            description: description?.trim() || null
-          }
-        });
+        const mentorUpdateData: any = {};
+        
+        if (organization !== null && organization !== undefined) {
+          mentorUpdateData.organization = organization.trim() || null;
+        }
+        
+        if (role !== null && role !== undefined) {
+          mentorUpdateData.role = role.trim() || null;
+        }
+        
+        if (expertise !== null && expertise !== undefined) {
+          mentorUpdateData.expertise = expertise.trim() || null;
+        }
+        
+        if (description !== null && description !== undefined) {
+          mentorUpdateData.description = description.trim() || null;
+        }
+        
+        // Only update if there are fields to update
+        if (Object.keys(mentorUpdateData).length > 0) {
+          await prisma.mentor.update({
+            where: { userId: userId },
+            data: mentorUpdateData
+          });
+        }
       } else {
         // Create mentor record if it doesn't exist
         await prisma.mentor.create({
@@ -163,17 +219,39 @@ export async function updateUserProfile(req: Request, res: Response) {
       }
     } else if (existingUser.userRole === 'FACULTY') {
       if (existingUser.faculty) {
-        await prisma.faculty.update({
-          where: { userId: userId },
-          data: {
-            institution: institution?.trim() || null,
-            role: role?.trim() || null,
-            expertise: expertise?.trim() || null,
-            course: course?.trim() || null,
-            mentoring: typeof mentoring === 'boolean' ? mentoring : (mentoring === 'true'),
-            description: description?.trim() || null
-          }
-        });
+        const facultyUpdateData: any = {};
+        
+        if (institution !== null && institution !== undefined) {
+          facultyUpdateData.institution = institution.trim() || null;
+        }
+        
+        if (role !== null && role !== undefined) {
+          facultyUpdateData.role = role.trim() || null;
+        }
+        
+        if (expertise !== null && expertise !== undefined) {
+          facultyUpdateData.expertise = expertise.trim() || null;
+        }
+        
+        if (course !== null && course !== undefined) {
+          facultyUpdateData.course = course.trim() || null;
+        }
+        
+        if (mentoring !== null && mentoring !== undefined) {
+          facultyUpdateData.mentoring = typeof mentoring === 'boolean' ? mentoring : (mentoring === 'true');
+        }
+        
+        if (description !== null && description !== undefined) {
+          facultyUpdateData.description = description.trim() || null;
+        }
+        
+        // Only update if there are fields to update
+        if (Object.keys(facultyUpdateData).length > 0) {
+          await prisma.faculty.update({
+            where: { userId: userId },
+            data: facultyUpdateData
+          });
+        }
       } else {
         // Create faculty record if it doesn't exist
         await prisma.faculty.create({
@@ -190,14 +268,27 @@ export async function updateUserProfile(req: Request, res: Response) {
       }
     } else if (existingUser.userRole === 'OTHER') {
       if (existingUser.other) {
-        await prisma.other.update({
-          where: { userId: userId },
-          data: {
-            workplace: workplace?.trim() || null,
-            role: role?.trim() || null,
-            description: description?.trim() || null
-          }
-        });
+        const otherUpdateData: any = {};
+        
+        if (workplace !== null && workplace !== undefined) {
+          otherUpdateData.workplace = workplace.trim() || null;
+        }
+        
+        if (role !== null && role !== undefined) {
+          otherUpdateData.role = role.trim() || null;
+        }
+        
+        if (description !== null && description !== undefined) {
+          otherUpdateData.description = description.trim() || null;
+        }
+        
+        // Only update if there are fields to update
+        if (Object.keys(otherUpdateData).length > 0) {
+          await prisma.other.update({
+            where: { userId: userId },
+            data: otherUpdateData
+          });
+        }
       } else {
         // Create other record if it doesn't exist
         await prisma.other.create({
