@@ -15,8 +15,6 @@ export default async function completeProfileHandler(req: Request, res: Response
       userType, 
       institution, 
       highestEducation, 
-      // odrLabUsage, <- Remove this field as it doesn't exist in the schema
-      // Additional fields for role-specific profiles
       mentorType,
       organization,
       expertise,

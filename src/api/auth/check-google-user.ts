@@ -3,7 +3,7 @@ import prisma from "../../lib/prisma";
 
 export default async function checkGoogleUserHandler(req: Request, res: Response) {
   try {
-    const { email, name } = req.body; // Exclude image as it's not stored
+    const { email, name, imageAvatar } = req.body; // Include imageAvatar URL
 
     if (!email || !name) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -33,6 +33,7 @@ export default async function checkGoogleUserHandler(req: Request, res: Response
           data: {
             name,
             email: email.toLowerCase().trim(),
+            imageAvatar: imageAvatar || null, // Store the image URL
             userRole: "INNOVATOR", // Default role
             password: null, // No password for Google users
           }
