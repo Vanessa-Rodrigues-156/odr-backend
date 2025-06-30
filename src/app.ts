@@ -65,8 +65,8 @@ app.use("/api/submit-idea", authenticateJWT, submitIdeaRoutes);
 app.use("/api/admin", authenticateJWT, adminRoutes);
 app.use("/api/collaboration", authenticateJWT, collaborationRoutes);
 app.use("/api/mentors", authenticateJWT, mentorsRoutes);
-// Add the user routes
-app.use("/api/user", userRoutes);
+// Add the user routes with authentication middleware
+app.use("/api/user", authenticateJWT, userRoutes);
 
 app.use(errorHandler);
 

@@ -1,14 +1,63 @@
 import { Router } from "express";
-import { authenticateJWT, AuthRequest } from "../../middleware/auth";
+import { AuthRequest } from "../../middleware/auth";
 import prisma from "../../lib/prisma";
 import profileHandler from "./profile";
 
 const router = Router();
-router.use(authenticateJWT);
 
 // Profile routes
 router.get("/profile", profileHandler);
 router.put("/profile", profileHandler);
+
+// Stats route
+router.get("/stats", async (req: AuthRequest, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    
+    const userId = req.user.id;
+    
+    // Get count of user's ideas
+    const ideasCount = await prisma.idea.count({
+      where: { ownerId: userId }
+    });
+    
+    // Get count of user's collaborations (projects they're collaborating on but didn't create)
+    const collaborationsCount = await prisma.ideaCollaborator.count({
+      where: { userId }
+    });
+    
+    // Get mentorship count based on role
+    let mentorshipsCount = 0;
+    
+    if (req.user.userRole === "MENTOR") {
+      // If user is a mentor, count projects they're mentoring
+      mentorshipsCount = await prisma.ideaMentor.count({
+        where: { userId }
+      });
+    } else {
+      // For other users, count mentors on their projects
+      mentorshipsCount = await prisma.ideaMentor.count({
+        where: {
+          idea: {
+            ownerId: userId
+          }
+        }
+      });
+    }
+    
+    res.json({
+      ideasCount,
+      collaborationsCount,
+      mentorshipsCount
+    });
+    
+  } catch (error) {
+    console.error("Error fetching user stats:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // API endpoint to apply as mentor (for users who were rejected previously)
 router.post("/apply-mentor", async (req: AuthRequest, res) => {

@@ -5,7 +5,11 @@ import { authenticateJWT } from "../../middleware/auth";
 // GET /api/user/profile - Get current user profile
 export async function getUserProfile(req: Request, res: Response) {
   try {
-    const userId = (req as any).userId;
+    const userId = (req as any).user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ error: "User ID not found in request" });
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -31,7 +35,12 @@ export async function getUserProfile(req: Request, res: Response) {
 // PUT /api/user/profile - Update user profile
 export async function updateUserProfile(req: Request, res: Response) {
   try {
-    const userId = (req as any).userId;
+    const userId = (req as any).user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ error: "User ID not found in request" });
+    }
+    
     const {
       name,
       imageAvatar,
@@ -225,13 +234,8 @@ export async function updateUserProfile(req: Request, res: Response) {
 
 // Combined handler for the route
 export default async function profileHandler(req: Request, res: Response) {
-  // Apply authentication middleware
-  await new Promise<void>((resolve, reject) => {
-    authenticateJWT(req, res, (err: any) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  // Authentication is already handled by app.use("/api/user", authenticateJWT, userRoutes);
+  // No need to apply it again here
 
   if (req.method === 'GET') {
     return getUserProfile(req, res);
