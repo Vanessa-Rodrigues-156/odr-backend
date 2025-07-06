@@ -14,15 +14,22 @@
   },
   "dependencies": {
     "@prisma/client": "^6.10.1",
+    "@types/cookie-parser": "^1.4.9",
     "@types/cors": "^2.8.18",
+    "@types/csurf": "^1.11.5",
     "axios": "^1.9.0",
     "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "csurf": "^1.11.0",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "7.0.0",
     "jsonwebtoken": "^9.0.0",
     "prisma": "^6.8.2",
-    "together-ai": "^0.16.0"
+    "together-ai": "^0.16.0",
+    "zod": "^3.25.74"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.2",

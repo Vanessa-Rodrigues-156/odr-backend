@@ -53,12 +53,16 @@ export const authenticateJWT = async (
   next: NextFunction
 ) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token =
-      authHeader && authHeader.startsWith("Bearer ")
-        ? authHeader.split(" ")[1]
-        : null;
-
+    // Try to get token from cookie first
+    let token = req.cookies?.access_token;
+    // Fallback to Authorization header if not present
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      token =
+        authHeader && authHeader.startsWith("Bearer ")
+          ? authHeader.split(" ")[1]
+          : null;
+    }
     if (!token) {
       console.log("No token provided");
       return res.status(401).json({ error: "Access token required" });

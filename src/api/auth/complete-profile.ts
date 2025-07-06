@@ -2,9 +2,50 @@ import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import prisma from "../../lib/prisma";
 import { UserRole } from "@prisma/client";
+import { z } from "zod";
+
+function sanitizeString(str: string): string {
+  return str.replace(/<script.*?>.*?<\/script>/gi, "").replace(/[<>]/g, "");
+}
+
+const completeProfileSchema = z.object({
+  userId: z.string().uuid().optional(),
+  email: z.string().email().max(200).optional(),
+  name: z.string().min(2).max(100).optional(),
+  contactNumber: z.string().min(5).max(20).optional(),
+  city: z.string().max(100).optional(),
+  country: z.string().max(100).optional(),
+  userType: z.string().max(100).optional(),
+  institution: z.string().max(200).optional().nullable(),
+  highestEducation: z.string().max(100).optional().nullable(),
+  mentorType: z.enum(["TECHNICAL_EXPERT", "LEGAL_EXPERT", "ODR_EXPERT", "CONFLICT_RESOLUTION_EXPERT"]).optional().nullable(),
+  organization: z.string().max(200).optional().nullable(),
+  expertise: z.string().max(200).optional().nullable(),
+  role: z.string().max(100).optional().nullable(),
+  courseName: z.string().max(100).optional().nullable(),
+  courseStatus: z.string().max(100).optional().nullable(),
+  description: z.string().max(1000).optional().nullable(),
+  workplace: z.string().max(200).optional().nullable(),
+});
+
+// Helper to get cookie options
+function getCookieOptions(isRefresh = false) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    ...(isRefresh ? { maxAge: 7 * 24 * 60 * 60 * 1000 } : { maxAge: 15 * 60 * 1000 })
+  };
+}
 
 export default async function completeProfileHandler(req: Request, res: Response) {
   try {
+    // Validate and sanitize input
+    const parseResult = completeProfileSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
+    }
     const { 
       userId, 
       email,
@@ -23,7 +64,7 @@ export default async function completeProfileHandler(req: Request, res: Response
       courseStatus,
       description,
       workplace
-    } = req.body;
+    } = parseResult.data;
     
     // Either userId or email must be provided to identify the user
     if (!userId && !email) {
@@ -45,7 +86,11 @@ export default async function completeProfileHandler(req: Request, res: Response
       other: "OTHER"
     };
     
-    const userRole = userRoleMap[userType] || "INNOVATOR";
+    // userType comes from the frontend as a string (e.g., "student", "faculty", "mentor", "tech", "law", etc.)
+    // The userRoleMap is an index type so we can map any string userType to a backend UserRole enum value.
+    // This allows flexibility if the frontend sends different userType strings.
+    // If the userType is not found in the map, default to "INNOVATOR".
+    const userRole = userRoleMap[userType ?? ""] || "INNOVATOR";
     
     let user;
     
@@ -242,11 +287,19 @@ export default async function completeProfileHandler(req: Request, res: Response
       return res.status(500).json({ error: "Server configuration error" });
     }
     
-    const token = jwt.sign(
+    // Generate tokens
+    const accessToken = jwt.sign(
+      { id: updatedUser.id, email: updatedUser.email, userRole: updatedUser.userRole },
+      jwtSecret,
+      { expiresIn: "15m" }
+    );
+    const refreshToken = jwt.sign(
       { id: updatedUser.id, email: updatedUser.email, userRole: updatedUser.userRole },
       jwtSecret,
       { expiresIn: "7d" }
     );
+    res.cookie("access_token", accessToken, getCookieOptions());
+    res.cookie("refresh_token", refreshToken, getCookieOptions(true));
     
     // Prepare role-specific data for the response
     let roleSpecificData = {};
@@ -296,7 +349,6 @@ export default async function completeProfileHandler(req: Request, res: Response
         createdAt: updatedUser.createdAt,
         ...roleSpecificData,
       },
-      token,
       message: "Profile completed successfully",
     });
     

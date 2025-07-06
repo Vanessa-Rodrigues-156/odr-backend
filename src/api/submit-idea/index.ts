@@ -1,6 +1,7 @@
 import { Router, Response, NextFunction } from "express";
 import { authenticateJWT, AuthRequest } from "../../middleware/auth";
 import prisma from "../../lib/prisma";
+import rateLimit from "express-rate-limit";
 
 const router = Router();
 // Create an authenticated router for routes that require login
@@ -20,8 +21,17 @@ const ensureAuthenticated = (req: AuthRequest, res: Response, next: NextFunction
 // Apply authentication middleware to authenticatedRouter
 authenticatedRouter.use(ensureAuthenticated);
 
+// Rate limiter for form submissions (20 requests per 10 minutes)
+const formLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 20,
+  message: { error: "Too many form submissions, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Submit a new idea (pending approval)
-authenticatedRouter.post("/", async (req: AuthRequest, res) => {
+authenticatedRouter.post("/", formLimiter, async (req: AuthRequest, res) => {
   const { title, idea_caption, description, odr_experience, consent } =
     req.body;
 

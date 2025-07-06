@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 
 export default async function logoutHandler(req: Request, res: Response) {
-  // If using cookies, clear the cookie here
-  // res.clearCookie("token");
+  // Clear auth cookies
+  res.clearCookie("access_token", { path: "/" });
+  res.clearCookie("refresh_token", { path: "/" });
   res.json({ success: true });
 }
