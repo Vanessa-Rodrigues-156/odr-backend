@@ -10,7 +10,7 @@ const cspDirectives = isProduction
       scriptSrc: ["'self'", "'unsafe-inline'", "https://www.googletagmanager.com"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https://www.google-analytics.com"],
-      connectSrc: ["'self'", "https://api.odrlab.com"],
+      connectSrc: ["'self'", "https://api.odrlab.com", "https://odrlab-backend.netlify.app"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       frameSrc: ["'self'"],
     }

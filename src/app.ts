@@ -55,7 +55,7 @@ app.use(
       "https://www.odrlab.com",
       "https://api.odrlab.com",
       "http://localhost:3000",
-      "https://odrlab.netlify.app/"
+      "https://odrlab.netlify.app"
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization", "x-csrf-token"],
@@ -73,7 +73,8 @@ app.use((req, res, next) => {
       origin === "https://odrlab.com" ||
       origin === "https://www.odrlab.com" ||
       origin === "https://api.odrlab.com" ||
-      origin === "http://localhost:3000"
+      origin === "http://localhost:3000" ||
+      origin === "https://odrlab.netlify.app"
     ) {
       res.header("Access-Control-Allow-Origin", origin);
     }
