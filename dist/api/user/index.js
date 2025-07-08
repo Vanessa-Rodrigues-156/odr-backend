@@ -4,12 +4,67 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const auth_1 = require("../../middleware/auth");
 const prisma_1 = __importDefault(require("../../lib/prisma"));
+const profile_1 = __importDefault(require("./profile"));
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const router = (0, express_1.Router)();
-router.use(auth_1.authenticateJWT);
+// Rate limiter for mentor application (20 requests per 10 minutes)
+const formLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 20,
+    message: { error: "Too many mentor applications, please try again later." },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+// Profile routes
+router.get("/profile", profile_1.default);
+router.put("/profile", profile_1.default);
+// Stats route
+router.get("/stats", async (req, res) => {
+    try {
+        if (!req.user) {
+            return res.status(401).json({ error: "Authentication required" });
+        }
+        const userId = req.user.id;
+        // Get count of user's ideas
+        const ideasCount = await prisma_1.default.idea.count({
+            where: { ownerId: userId }
+        });
+        // Get count of user's collaborations (projects they're collaborating on but didn't create)
+        const collaborationsCount = await prisma_1.default.ideaCollaborator.count({
+            where: { userId }
+        });
+        // Get mentorship count based on role
+        let mentorshipsCount = 0;
+        if (req.user.userRole === "MENTOR") {
+            // If user is a mentor, count projects they're mentoring
+            mentorshipsCount = await prisma_1.default.ideaMentor.count({
+                where: { userId }
+            });
+        }
+        else {
+            // For other users, count mentors on their projects
+            mentorshipsCount = await prisma_1.default.ideaMentor.count({
+                where: {
+                    idea: {
+                        ownerId: userId
+                    }
+                }
+            });
+        }
+        res.json({
+            ideasCount,
+            collaborationsCount,
+            mentorshipsCount
+        });
+    }
+    catch (error) {
+        console.error("Error fetching user stats:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
 // API endpoint to apply as mentor (for users who were rejected previously)
-router.post("/apply-mentor", async (req, res) => {
+router.post("/apply-mentor", formLimiter, async (req, res) => {
     try {
         if (!req.user) {
             return res.status(401).json({ error: "Authentication required" });

@@ -6,12 +6,47 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = completeProfileHandler;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma_1 = __importDefault(require("../../lib/prisma"));
+const zod_1 = require("zod");
+function sanitizeString(str) {
+    return str.replace(/<script.*?>.*?<\/script>/gi, "").replace(/[<>]/g, "");
+}
+const completeProfileSchema = zod_1.z.object({
+    userId: zod_1.z.string().uuid().optional(),
+    email: zod_1.z.string().email().max(200).optional(),
+    name: zod_1.z.string().min(2).max(100).optional(),
+    contactNumber: zod_1.z.string().min(5).max(20).optional(),
+    city: zod_1.z.string().max(100).optional(),
+    country: zod_1.z.string().max(100).optional(),
+    userType: zod_1.z.string().max(100).optional(),
+    institution: zod_1.z.string().max(200).optional().nullable(),
+    highestEducation: zod_1.z.string().max(100).optional().nullable(),
+    mentorType: zod_1.z.enum(["TECHNICAL_EXPERT", "LEGAL_EXPERT", "ODR_EXPERT", "CONFLICT_RESOLUTION_EXPERT"]).optional().nullable(),
+    organization: zod_1.z.string().max(200).optional().nullable(),
+    expertise: zod_1.z.string().max(200).optional().nullable(),
+    role: zod_1.z.string().max(100).optional().nullable(),
+    courseName: zod_1.z.string().max(100).optional().nullable(),
+    courseStatus: zod_1.z.string().max(100).optional().nullable(),
+    description: zod_1.z.string().max(1000).optional().nullable(),
+    workplace: zod_1.z.string().max(200).optional().nullable(),
+});
+// Helper to get cookie options
+function getCookieOptions(isRefresh = false) {
+    return {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        ...(isRefresh ? { maxAge: 7 * 24 * 60 * 60 * 1000 } : { maxAge: 15 * 60 * 1000 })
+    };
+}
 async function completeProfileHandler(req, res) {
     try {
-        const { userId, email, name, contactNumber, city, country, userType, institution, highestEducation, 
-        // odrLabUsage, <- Remove this field as it doesn't exist in the schema
-        // Additional fields for role-specific profiles
-        mentorType, organization, expertise, role, courseName, courseStatus, description, workplace } = req.body;
+        // Validate and sanitize input
+        const parseResult = completeProfileSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
+        }
+        const { userId, email, name, contactNumber, city, country, userType, institution, highestEducation, mentorType, organization, expertise, role, courseName, courseStatus, description, workplace } = parseResult.data;
         // Either userId or email must be provided to identify the user
         if (!userId && !email) {
             return res.status(400).json({ error: "User identification (userId or email) is required" });
@@ -29,7 +64,11 @@ async function completeProfileHandler(req, res) {
             faculty: "FACULTY",
             other: "OTHER"
         };
-        const userRole = userRoleMap[userType] || "INNOVATOR";
+        // userType comes from the frontend as a string (e.g., "student", "faculty", "mentor", "tech", "law", etc.)
+        // The userRoleMap is an index type so we can map any string userType to a backend UserRole enum value.
+        // This allows flexibility if the frontend sends different userType strings.
+        // If the userType is not found in the map, default to "INNOVATOR".
+        const userRole = userRoleMap[userType ?? ""] || "INNOVATOR";
         let user;
         // Find user by ID or email
         if (userId) {
@@ -221,7 +260,11 @@ async function completeProfileHandler(req, res) {
             console.error("JWT_SECRET is not configured!");
             return res.status(500).json({ error: "Server configuration error" });
         }
-        const token = jsonwebtoken_1.default.sign({ id: updatedUser.id, email: updatedUser.email, userRole: updatedUser.userRole }, jwtSecret, { expiresIn: "7d" });
+        // Generate tokens
+        const accessToken = jsonwebtoken_1.default.sign({ id: updatedUser.id, email: updatedUser.email, userRole: updatedUser.userRole }, jwtSecret, { expiresIn: "15m" });
+        const refreshToken = jsonwebtoken_1.default.sign({ id: updatedUser.id, email: updatedUser.email, userRole: updatedUser.userRole }, jwtSecret, { expiresIn: "7d" });
+        res.cookie("access_token", accessToken, getCookieOptions());
+        res.cookie("refresh_token", refreshToken, getCookieOptions(true));
         // Prepare role-specific data for the response
         let roleSpecificData = {};
         if (updatedUser.userRole === "INNOVATOR" && updatedUser.innovator) {
@@ -272,7 +315,6 @@ async function completeProfileHandler(req, res) {
                 createdAt: updatedUser.createdAt,
                 ...roleSpecificData,
             },
-            token,
             message: "Profile completed successfully",
         });
     }

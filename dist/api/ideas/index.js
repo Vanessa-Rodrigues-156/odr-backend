@@ -4,8 +4,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const zod_1 = require("zod");
 const prisma_1 = __importDefault(require("../../lib/prisma"));
 const auth_1 = require("../../middleware/auth");
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 // Create separate routers for different auth levels
 const router = (0, express_1.Router)();
 const authenticatedRouter = (0, express_1.Router)();
@@ -32,14 +34,23 @@ const ensureAdmin = (req, res, next) => {
 // Apply authentication middleware to their respective routers
 authenticatedRouter.use(ensureAuthenticated);
 adminRouter.use(ensureAdmin);
+// Rate limiter for form submissions (20 requests per 10 minutes)
+const formLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 20,
+    message: { error: "Too many form submissions, please try again later." },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
 // --- IDEA SUBMISSION FLOW ---
 // Submit a new idea (goes to IdeaSubmission, not Idea)
 // Protected route - requires authentication
-authenticatedRouter.post("/submit", async (req, res) => {
-    const { title, caption, description, priorOdrExperience } = req.body;
-    if (!title || !description) {
-        return res.status(400).json({ error: "Title and description are required." });
+authenticatedRouter.post("/submit", formLimiter, async (req, res) => {
+    const parseResult = ideaSubmissionSchema.safeParse(req.body);
+    if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
     }
+    const { title, caption, description, priorOdrExperience } = parseResult.data;
     try {
         // Since we've used the ensureAuthenticated middleware, req.user is guaranteed to be defined
         const submission = await prisma_1.default.ideaSubmission.create({
@@ -132,10 +143,11 @@ adminRouter.get("/", async (req, res) => {
 });
 // Create a new idea (for admin only, normal users use /submit)
 adminRouter.post("/", async (req, res) => {
-    const { title, caption, description, ownerId } = req.body;
-    if (!title || !description || !ownerId) {
-        return res.status(400).json({ error: "Title, description, and ownerId are required." });
+    const parseResult = adminIdeaSchema.safeParse(req.body);
+    if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
     }
+    const { title, caption, description, ownerId } = parseResult.data;
     try {
         const idea = await prisma_1.default.idea.create({
             data: {
@@ -375,10 +387,14 @@ router.get("/:id/comments", async (req, res) => {
 });
 // Add comment
 authenticatedRouter.post("/:id/comments", async (req, res) => {
-    const { id } = req.params;
-    const { content, parentId } = req.body;
+    const parseResult = commentSchema.safeParse(req.body);
+    if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
+    }
+    const { content, parentId } = parseResult.data;
     if (!content)
         return res.status(400).json({ error: "Content required" });
+    const { id } = req.params;
     const comment = await prisma_1.default.comment.create({
         data: {
             content,
@@ -392,11 +408,12 @@ authenticatedRouter.post("/:id/comments", async (req, res) => {
 });
 // Update like/unlike idea route to match frontend expectations
 authenticatedRouter.post("/:id/likes", async (req, res) => {
-    const { id } = req.params;
-    const { action } = req.body; // 'like' or 'unlike'
-    if (!["like", "unlike"].includes(action)) {
-        return res.status(400).json({ error: "Invalid action" });
+    const parseResult = likeSchema.safeParse(req.body);
+    if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
     }
+    const { id } = req.params;
+    const { action } = parseResult.data; // 'like' or 'unlike'
     if (action === "like") {
         const like = await prisma_1.default.like.upsert({
             where: { userId_ideaId: { userId: req.user.id, ideaId: id } },
@@ -617,3 +634,30 @@ function processUserFields(user) {
 router.use("/", authenticatedRouter);
 router.use("/", adminRouter);
 exports.default = router;
+// Helper: Remove script tags and dangerous characters
+function sanitizeString(str) {
+    return str.replace(/<script.*?>.*?<\/script>/gi, "").replace(/[<>]/g, "");
+}
+// Zod schema for idea submission
+const ideaSubmissionSchema = zod_1.z.object({
+    title: zod_1.z.string().min(3).max(200).transform((v) => sanitizeString(v)),
+    caption: zod_1.z.string().max(300).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+    description: zod_1.z.string().min(10).max(2000).transform((v) => sanitizeString(v)),
+    priorOdrExperience: zod_1.z.string().max(500).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+});
+// Zod schema for admin idea creation
+const adminIdeaSchema = zod_1.z.object({
+    title: zod_1.z.string().min(3).max(200).transform((v) => sanitizeString(v)),
+    caption: zod_1.z.string().max(300).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+    description: zod_1.z.string().min(10).max(2000).transform((v) => sanitizeString(v)),
+    ownerId: zod_1.z.string().min(1),
+});
+// Zod schema for comment
+const commentSchema = zod_1.z.object({
+    content: zod_1.z.string().min(1).max(1000).transform((v) => sanitizeString(v)),
+    parentId: zod_1.z.string().optional().nullable(),
+});
+// Zod schema for like/unlike
+const likeSchema = zod_1.z.object({
+    action: zod_1.z.enum(["like", "unlike"]),
+});

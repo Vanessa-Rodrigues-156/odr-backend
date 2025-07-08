@@ -4,11 +4,72 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const zod_1 = require("zod");
 const prisma_1 = __importDefault(require("../../lib/prisma"));
 const auth_1 = require("../../middleware/auth");
 const router = (0, express_1.Router)();
 // Apply base JWT authentication to all routes
 router.use(auth_1.authenticateJWT);
+// Helper: Remove script tags and dangerous characters
+function sanitizeString(str) {
+    return str.replace(/<script.*?>.*?<\/script>/gi, "").replace(/[<>]/g, "");
+}
+// MentorType enum as per Prisma schema
+const MentorTypeEnum = zod_1.z.enum([
+    "TECHNICAL_EXPERT",
+    "LEGAL_EXPERT",
+    "ODR_EXPERT",
+    "CONFLICT_RESOLUTION_EXPERT"
+]);
+// Zod schema for mentor registration (fields as per Prisma schema)
+const mentorRegistrationSchema = zod_1.z.object({
+    name: zod_1.z.string().min(2).max(100).transform((v) => sanitizeString(v)),
+    email: zod_1.z.string().email().max(200).transform((v) => sanitizeString(v)),
+    contactNumber: zod_1.z.string().min(5).max(20).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+    city: zod_1.z.string().max(100).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+    country: zod_1.z.string().max(100).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+    mentorType: MentorTypeEnum,
+    organization: zod_1.z.string().max(200).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+    role: zod_1.z.string().max(100).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+    expertise: zod_1.z.string().max(200).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+    description: zod_1.z.string().max(1000).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+});
+// Example POST /api/mentors/register (add this if not present)
+router.post("/register", async (req, res) => {
+    const parseResult = mentorRegistrationSchema.safeParse(req.body);
+    if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
+    }
+    const { name, email, contactNumber, city, country, mentorType, organization, role, expertise, description } = parseResult.data;
+    try {
+        // Create mentor user and mentor profile as per schema
+        const user = await prisma_1.default.user.create({
+            data: {
+                name,
+                email,
+                contactNumber,
+                city,
+                country,
+                userRole: "MENTOR",
+                mentor: {
+                    create: {
+                        mentorType,
+                        organization,
+                        role,
+                        expertise,
+                        description,
+                        approved: false
+                    }
+                }
+            },
+            include: { mentor: true }
+        });
+        res.status(201).json(user);
+    }
+    catch (error) {
+        res.status(500).json({ error: "Failed to register mentor", details: error instanceof Error ? error.message : "Unknown error" });
+    }
+});
 // Get all mentors
 router.get("/", async (req, res) => {
     try {
