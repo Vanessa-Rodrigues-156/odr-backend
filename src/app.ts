@@ -55,6 +55,7 @@ app.use(
       "https://www.odrlab.com",
       "https://api.odrlab.com",
       "http://localhost:3000",
+      "https://odrlab.netlify.app/"
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization", "x-csrf-token"],
