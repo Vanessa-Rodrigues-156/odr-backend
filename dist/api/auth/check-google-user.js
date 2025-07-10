@@ -4,13 +4,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = checkGoogleUserHandler;
+const zod_1 = require("zod");
 const prisma_1 = __importDefault(require("../../lib/prisma"));
+function sanitizeString(str) {
+    return str.replace(/<script.*?>.*?<\/script>/gi, "").replace(/[<>]/g, "");
+}
+const checkGoogleUserSchema = zod_1.z.object({
+    email: zod_1.z.string().email().max(200).transform((v) => sanitizeString(v)),
+    name: zod_1.z.string().min(2).max(100).transform((v) => sanitizeString(v)),
+    imageAvatar: zod_1.z.string().url().max(300).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+});
 async function checkGoogleUserHandler(req, res) {
     try {
-        const { email, name } = req.body; // Exclude image as it's not stored
-        if (!email || !name) {
-            return res.status(400).json({ error: "Missing required fields" });
+        // Validate and sanitize input
+        const parseResult = checkGoogleUserSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
         }
+        const { email, name, imageAvatar } = parseResult.data; // Include imageAvatar URL
         // Check if user already exists by email
         const existingUser = await prisma_1.default.user.findUnique({
             where: { email: email.toLowerCase().trim() },
@@ -35,6 +46,7 @@ async function checkGoogleUserHandler(req, res) {
                     data: {
                         name,
                         email: email.toLowerCase().trim(),
+                        imageAvatar: imageAvatar || null, // Store the image URL
                         userRole: "INNOVATOR", // Default role
                         password: null, // No password for Google users
                     }

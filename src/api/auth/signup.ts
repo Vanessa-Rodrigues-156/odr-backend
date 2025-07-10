@@ -2,10 +2,60 @@ import { Request, Response } from "express";
 import prisma from "../../lib/prisma";
 import bcrypt from "bcryptjs";
 import { UserRole, MentorType } from "@prisma/client";
+import { z } from "zod";
+
+function sanitizeString(str: string): string {
+  return str.replace(/<script.*?>.*?<\/script>/gi, "").replace(/[<>]/g, "");
+}
+
+const signupSchema = z.object({
+  name: z.string().min(2).max(100).transform((v: string) => sanitizeString(v)),
+  email: z.string().email().max(200).transform((v: string) => sanitizeString(v)),
+  password: z.string().min(8).max(100),
+  contactNumber: z.string().min(5).max(20).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  city: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  country: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  userRole: z.enum(["ADMIN", "INNOVATOR", "MENTOR", "FACULTY", "OTHER"]).optional(),
+  institution: z.string().max(200).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  highestEducation: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  odrLabUsage: z.string().max(1000).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  studentInstitute: z.string().max(200).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  courseStatus: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  courseName: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  facultyInstitute: z.string().max(200).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  facultyRole: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  facultyExpertise: z.string().max(200).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  facultyCourse: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  facultyMentor: z.string().optional().nullable(),
+  mentorType: z.enum(["tech", "law", "odr", "conflict"]).optional().nullable(),
+  techOrg: z.string().max(200).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  lawFirm: z.string().max(200).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  techRole: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  otherWorkplace: z.string().max(200).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  otherRole: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  mainUserType: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  userType: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+});
+
+// Helper to get cookie options
+function getCookieOptions(isRefresh = false) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    ...(isRefresh ? { maxAge: 7 * 24 * 60 * 60 * 1000 } : { maxAge: 15 * 60 * 1000 })
+  };
+}
 
 export default async function signupHandler(req: Request, res: Response) {
   console.log("Signup request received:", JSON.stringify(req.body, null, 2));
   
+  // Validate and sanitize input
+  const parseResult = signupSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
+  }
   const {
     name,
     email,
@@ -39,7 +89,7 @@ export default async function signupHandler(req: Request, res: Response) {
     // Additional fields
     mainUserType,
     userType
-  } = req.body;
+  } = parseResult.data;
 
   // Basic validation
   if (!name || !email || !password) {
@@ -199,18 +249,33 @@ export default async function signupHandler(req: Request, res: Response) {
       return user;
     });
 
-    // For frontend auto-login, return a JWT token as well
+    // Generate tokens
     const jwt = require("jsonwebtoken");
-    const token = jwt.sign(
+    const accessToken = jwt.sign(
+      { id: user.id, email: user.email, userRole: user.userRole },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+    const refreshToken = jwt.sign(
       { id: user.id, email: user.email, userRole: user.userRole },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
+    res.cookie("access_token", accessToken, getCookieOptions());
+    res.cookie("refresh_token", refreshToken, getCookieOptions(true));
+
+    // For frontend auto-login, return a JWT token as well
+    // const jwt = require("jsonwebtoken");
+    // const token = jwt.sign(
+    //   { id: user.id, email: user.email, userRole: user.userRole },
+    //   process.env.JWT_SECRET,
+    //   { expiresIn: "7d" }
+    // );
 
     // Fetch the complete user data including type-specific information
     const userData = await getUserWithTypeData(user.id, user.userRole);
 
-    res.status(201).json({ user: userData, token });
+    res.status(201).json({ user: userData });
   } catch (error) {
     console.error("Error during signup:", error);
     res.status(500).json({ error: "Error creating user account." });

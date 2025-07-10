@@ -10,19 +10,33 @@
     "migrate:dev": "prisma migrate dev",
     "migrate:user-data": "ts-node src/scripts/migrateUserData.ts",
     "verify:migration": "ts-node src/scripts/verifyMigration.ts",
-    "import:backup-data": "ts-node src/scripts/importBackupData.ts"
+    "import:backup-data": "ts-node src/scripts/importBackupData.ts",
+    "test": "jest --runInBand --detectOpenHandles"
   },
   "dependencies": {
     "@prisma/client": "^6.10.1",
+    "@types/cookie-parser": "^1.4.9",
     "@types/cors": "^2.8.18",
+    "@types/csurf": "^1.11.5",
+    "@types/jest": "^30.0.0",
+    "@types/nodemailer": "^6.4.17",
+    "@types/supertest": "^6.0.3",
     "axios": "^1.9.0",
     "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "csurf": "^1.11.0",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "7.0.0",
+    "jest": "^30.0.4",
     "jsonwebtoken": "^9.0.0",
+    "nodemailer": "^7.0.4",
     "prisma": "^6.8.2",
-    "together-ai": "^0.16.0"
+    "supertest": "^7.1.1",
+    "together-ai": "^0.16.0",
+    "zod": "^3.25.74"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.2",

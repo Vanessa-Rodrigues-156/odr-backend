@@ -7,17 +7,33 @@ exports.default = loginHandler;
 const prisma_1 = __importDefault(require("../../lib/prisma"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const zod_1 = require("zod");
+function sanitizeString(str) {
+    return str.replace(/<script.*?>.*?<\/script>/gi, "").replace(/[<>]/g, "");
+}
+const loginSchema = zod_1.z.object({
+    email: zod_1.z.string().email().max(200).transform((v) => sanitizeString(v)),
+    password: zod_1.z.string().min(8).max(100),
+});
+// Helper to get cookie options
+function getCookieOptions(isRefresh = false) {
+    return {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        ...(isRefresh ? { maxAge: 7 * 24 * 60 * 60 * 1000 } : { maxAge: 15 * 60 * 1000 }) // 7d for refresh, 15m for access
+    };
+}
 async function loginHandler(req, res) {
     try {
         console.log("Login request received");
-        // Validate request body
-        const { email, password } = req.body;
-        if (!email || !password) {
-            console.log("Login rejected: Missing email or password");
-            return res
-                .status(400)
-                .json({ error: "Email and password are required." });
+        // Validate and sanitize input
+        const parseResult = loginSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
         }
+        const { email, password } = parseResult.data;
         // Ensure email is a valid string and normalize it
         if (typeof email !== "string" || typeof password !== "string") {
             console.error("Login error: invalid data types", {
@@ -130,30 +146,18 @@ async function loginHandler(req, res) {
             isMentorApproved,
             mentorRejectionReason
         };
-        // Create JWT token with user data
-        try {
-            const token = jsonwebtoken_1.default.sign({
-                id: user.id,
-                email: user.email,
-                userRole: user.userRole,
-                hasMentorApplication,
-                isMentorApproved
-            }, jwtSecret, {
-                expiresIn: "7d",
-                algorithm: "HS256"
-            });
-            console.log(`Login successful for user: ${normalizedEmail} with role: ${user.userRole}`);
-            // Return user data and token
-            return res.status(200).json({
-                user: userResponseWithMentorStatus,
-                token,
-                message: "Login successful"
-            });
-        }
-        catch (jwtError) {
-            console.error("JWT signing error:", jwtError);
-            return res.status(500).json({ error: "Authentication system error" });
-        }
+        // Generate tokens
+        const accessToken = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, userRole: user.userRole }, jwtSecret, { expiresIn: "15m" });
+        const refreshToken = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, userRole: user.userRole }, jwtSecret, { expiresIn: "7d" });
+        // Set cookies
+        res.cookie("access_token", accessToken, getCookieOptions());
+        res.cookie("refresh_token", refreshToken, getCookieOptions(true));
+        console.log(`Login successful for user: ${normalizedEmail} with role: ${user.userRole}`);
+        // Return user data only (no token in body)
+        return res.status(200).json({
+            user: userResponseWithMentorStatus,
+            message: "Login successful"
+        });
     }
     catch (err) {
         console.error("Login error:", err);
