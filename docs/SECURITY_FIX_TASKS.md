@@ -74,6 +74,21 @@
 - Better error messages with retry guidance
 - Graceful degradation
 
+### 7. Route Conflicts and Authentication Issues ✅ FIXED
+**Problem**: Backend route conflicts and authentication mismatches
+- GET `/ideas/:id` route was conflicting with authenticated routes
+- Route mounted on wrong router causing auth failures
+- Discussion API using manual auth headers instead of global apiFetch
+- 401 errors due to improper authentication flow
+
+**Solution Applied**:
+- Moved GET `/ideas/:id` route to `authenticatedRouter` to fix conflicts
+- Updated route to use `AuthRequest` instead of `Request`
+- Simplified discussion API to use global `apiFetch` function
+- Removed manual auth header creation that was conflicting
+- Fixed route ordering and mounting issues
+- Added debug logging to track authentication issues
+
 ## Remaining Tasks (Lower Priority)
 
 ### 7. Test Suite Fixes ⏳ PENDING
