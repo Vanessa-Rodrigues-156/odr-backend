@@ -260,9 +260,11 @@ async function completeProfileHandler(req, res) {
             console.error("JWT_SECRET is not configured!");
             return res.status(500).json({ error: "Server configuration error" });
         }
-        // Generate tokens
-        const accessToken = jsonwebtoken_1.default.sign({ id: updatedUser.id, email: updatedUser.email, userRole: updatedUser.userRole }, jwtSecret, { expiresIn: "15m" });
-        const refreshToken = jsonwebtoken_1.default.sign({ id: updatedUser.id, email: updatedUser.email, userRole: updatedUser.userRole }, jwtSecret, { expiresIn: "7d" });
+        // Generate tokens with longer expiration for better UX
+        const accessToken = jsonwebtoken_1.default.sign({ id: updatedUser.id, email: updatedUser.email, userRole: updatedUser.userRole }, jwtSecret, { expiresIn: "24h" } // Increased from 15m to 24h
+        );
+        const refreshToken = jsonwebtoken_1.default.sign({ id: updatedUser.id, email: updatedUser.email, userRole: updatedUser.userRole }, jwtSecret, { expiresIn: "30d" } // Increased from 7d to 30d
+        );
         res.cookie("access_token", accessToken, getCookieOptions());
         res.cookie("refresh_token", refreshToken, getCookieOptions(true));
         // Prepare role-specific data for the response

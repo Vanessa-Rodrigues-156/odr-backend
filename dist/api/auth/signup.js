@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = signupHandler;
 const prisma_1 = __importDefault(require("../../lib/prisma"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const zod_1 = require("zod");
 function sanitizeString(str) {
     return str.replace(/<script.*?>.*?<\/script>/gi, "").replace(/[<>]/g, "");
@@ -220,10 +221,17 @@ async function signupHandler(req, res) {
             }
             return user;
         });
-        // Generate tokens
-        const jwt = require("jsonwebtoken");
-        const accessToken = jwt.sign({ id: user.id, email: user.email, userRole: user.userRole }, process.env.JWT_SECRET, { expiresIn: "15m" });
-        const refreshToken = jwt.sign({ id: user.id, email: user.email, userRole: user.userRole }, process.env.JWT_SECRET, { expiresIn: "7d" });
+        // Check JWT secret configuration
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            console.error("JWT_SECRET is not configured!");
+            return res.status(500).json({ error: "Server configuration error" });
+        }
+        // Generate tokens with longer expiration for better UX
+        const accessToken = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, userRole: user.userRole }, jwtSecret, { expiresIn: "24h" } // Increased from 15m to 24h
+        );
+        const refreshToken = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, userRole: user.userRole }, jwtSecret, { expiresIn: "30d" } // Increased from 7d to 30d
+        );
         res.cookie("access_token", accessToken, getCookieOptions());
         res.cookie("refresh_token", refreshToken, getCookieOptions(true));
         // For frontend auto-login, return a JWT token as well

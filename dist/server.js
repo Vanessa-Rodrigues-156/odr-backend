@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
 // Determine which environment file to load
-const environment = process.env.NODE_ENV || 'development';
+const environment = process.env.NODE_ENV || 'production';
 const envFile = environment === 'production' ? '.env.production' : '.env.development';
 // Load the appropriate environment file
 dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), envFile) });

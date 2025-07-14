@@ -8,6 +8,7 @@ exports.updateUserProfile = updateUserProfile;
 exports.default = profileHandler;
 const zod_1 = require("zod");
 const prisma_1 = __importDefault(require("../../lib/prisma"));
+const auditLog_1 = require("../../lib/auditLog");
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 // Helper: Remove script tags and dangerous characters
 function sanitizeString(str) {
@@ -68,6 +69,8 @@ async function getUserProfile(req, res) {
 }
 // PUT /api/user/profile - Update user profile
 async function updateUserProfile(req, res) {
+    let success = false;
+    let message = '';
     try {
         const userId = req.user?.id;
         if (!userId) {
@@ -139,6 +142,8 @@ async function updateUserProfile(req, res) {
             where: { id: userId },
             data: updateData
         });
+        success = true;
+        message = 'Profile updated successfully';
         // Update role-specific data based on user's role
         if (existingUser.userRole === 'INNOVATOR') {
             if (existingUser.innovator) {
@@ -303,12 +308,33 @@ async function updateUserProfile(req, res) {
                 other: true
             }
         });
+        await (0, auditLog_1.logAuditEvent)({
+            action: 'UPDATE_PROFILE',
+            userId: userId,
+            userRole: existingUser.userRole,
+            targetId: userId,
+            targetType: 'USER',
+            success,
+            message,
+            ipAddress: req.ip,
+        });
         res.json({
             message: "Profile updated successfully",
             user: finalUser
         });
     }
     catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+        await (0, auditLog_1.logAuditEvent)({
+            action: 'UPDATE_PROFILE',
+            userId: req.user?.id,
+            userRole: undefined,
+            targetId: req.user?.id,
+            targetType: 'USER',
+            success: false,
+            message,
+            ipAddress: req.ip,
+        });
         console.error("Error updating user profile:", error);
         res.status(500).json({ error: "Internal server error" });
     }

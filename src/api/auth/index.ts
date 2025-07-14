@@ -12,13 +12,17 @@ import rateLimit from "express-rate-limit";
 
 const router = express.Router();
 
-// Rate limiters
+// Rate limiters - more reasonable limits for development and testing
 const authLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 5,
+  max: process.env.NODE_ENV === "production" ? 5 : 50, // More lenient in development
   message: { error: "Too many requests, please try again after a minute." },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for development
+    return process.env.NODE_ENV !== "production";
+  }
 });
 
 // Public routes - no authentication required

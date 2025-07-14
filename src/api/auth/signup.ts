@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../../lib/prisma";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import { UserRole, MentorType } from "@prisma/client";
 import { z } from "zod";
 
@@ -249,17 +250,23 @@ export default async function signupHandler(req: Request, res: Response) {
       return user;
     });
 
-    // Generate tokens
-    const jwt = require("jsonwebtoken");
+    // Check JWT secret configuration
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      console.error("JWT_SECRET is not configured!");
+      return res.status(500).json({ error: "Server configuration error" });
+    }
+
+    // Generate tokens with longer expiration for better UX
     const accessToken = jwt.sign(
       { id: user.id, email: user.email, userRole: user.userRole },
-      process.env.JWT_SECRET,
-      { expiresIn: "15m" }
+      jwtSecret,
+      { expiresIn: "24h" } // Increased from 15m to 24h
     );
     const refreshToken = jwt.sign(
       { id: user.id, email: user.email, userRole: user.userRole },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      jwtSecret,
+      { expiresIn: "30d" } // Increased from 7d to 30d
     );
     res.cookie("access_token", accessToken, getCookieOptions());
     res.cookie("refresh_token", refreshToken, getCookieOptions(true));

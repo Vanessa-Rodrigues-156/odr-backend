@@ -8,18 +8,17 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const authenticateJWT = async (req, res, next) => {
     try {
-        // Try to get token from cookie first
-        let token = req.cookies?.access_token;
-        // Fallback to Authorization header if not present
+        // Get token from Authorization header (primary method)
+        let token = null;
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith("Bearer ")) {
+            token = authHeader.split(" ")[1];
+        }
+        // Fallback to cookie if no Bearer token
         if (!token) {
-            const authHeader = req.headers.authorization;
-            token =
-                authHeader && authHeader.startsWith("Bearer ")
-                    ? authHeader.split(" ")[1]
-                    : null;
+            token = req.cookies?.access_token;
         }
         if (!token) {
-            console.log("No token provided");
             return res.status(401).json({ error: "Access token required" });
         }
         const jwtSecret = process.env.JWT_SECRET;
@@ -28,13 +27,9 @@ const authenticateJWT = async (req, res, next) => {
             return res.status(500).json({ error: "Server configuration error" });
         }
         const decoded = jsonwebtoken_1.default.verify(token, jwtSecret);
-        // Debug: Log the decoded token to see what's in it
-        console.log("Decoded JWT payload:", decoded);
-        // Extract user ID from different possible field names
+        // Extract user ID from token
         const userId = decoded.id || decoded.userId || decoded.sub;
-        // Check if decoded token has a valid user ID field
         if (!userId) {
-            console.error("JWT token missing user ID field. Available fields:", Object.keys(decoded));
             return res.status(401).json({
                 error: "Invalid token format - missing user ID",
             });

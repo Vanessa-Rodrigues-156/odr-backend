@@ -158,16 +158,16 @@ export default async function loginHandler(req: Request, res: Response) {
       mentorRejectionReason
     };
 
-    // Generate tokens
+    // Generate tokens with longer expiration for better UX
     const accessToken = jwt.sign(
       { id: user.id, email: user.email, userRole: user.userRole },
       jwtSecret,
-      { expiresIn: "15m" }
+      { expiresIn: "24h" } // Increased from 15m to 24h
     );
     const refreshToken = jwt.sign(
       { id: user.id, email: user.email, userRole: user.userRole },
       jwtSecret,
-      { expiresIn: "7d" }
+      { expiresIn: "30d" } // Increased from 7d to 30d
     );
 
     // Set cookies

@@ -11,7 +11,6 @@ const meetings_1 = __importDefault(require("./api/meetings"));
 const errorHandler_1 = __importDefault(require("./middleware/errorHandler"));
 const auth_2 = require("./middleware/auth");
 const odrlabs_1 = __importDefault(require("./api/odrlabs"));
-const submit_idea_1 = __importDefault(require("./api/submit-idea"));
 const discussion_1 = __importDefault(require("./api/discussion"));
 const admin_1 = __importDefault(require("./api/admin"));
 const collaboration_1 = __importDefault(require("./api/collaboration"));
@@ -22,6 +21,7 @@ const helmet_1 = __importDefault(require("./middleware/helmet"));
 const csurf_1 = __importDefault(require("csurf"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const crypto_1 = __importDefault(require("crypto"));
+const index_1 = __importDefault(require("./api/contact/index"));
 const app = (0, express_1.default)();
 // --- CSP Nonce Middleware ---
 app.use((req, res, next) => {
@@ -52,9 +52,10 @@ app.use((0, cors_1.default)({
         "https://www.odrlab.com",
         "https://api.odrlab.com",
         "http://localhost:3000",
+        "https://odrlab.netlify.app"
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-csrf-token"],
     credentials: true,
 }));
 // Explicitly handle preflight OPTIONS requests for all routes
@@ -65,18 +66,20 @@ app.use((req, res, next) => {
         const origin = req.headers.origin;
         if (origin === "https://odrlab.com" ||
             origin === "https://www.odrlab.com" ||
-            origin === "https://api.odrlab.com") {
+            origin === "https://api.odrlab.com" ||
+            origin === "http://localhost:3000" ||
+            origin === "https://odrlab.netlify.app") {
             res.header("Access-Control-Allow-Origin", origin);
         }
         res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE");
-        res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-csrf-token");
         res.header("Access-Control-Allow-Credentials", "true");
         return res.sendStatus(200);
     }
     next();
 });
 app.use(express_1.default.json());
-// CSRF protection setup
+// CSRF protection setup - less restrictive for development
 app.use((0, cookie_parser_1.default)());
 const csrfProtection = (0, csurf_1.default)({
     cookie: {
@@ -85,18 +88,37 @@ const csrfProtection = (0, csurf_1.default)({
         secure: process.env.NODE_ENV === "production",
     },
     ignoreMethods: ["GET", "HEAD", "OPTIONS"],
+    // Skip CSRF for development to prevent issues
+    value: (req) => {
+        if (process.env.NODE_ENV !== "production") {
+            // In development, be more lenient with CSRF
+            return req.get('x-csrf-token') || req.body._csrf || req.query._csrf || 'dev-bypass';
+        }
+        return req.get('x-csrf-token') || req.body._csrf || req.query._csrf;
+    }
 });
-// Expose CSRF token to frontend via endpoint
-app.get("/api/csrf-token", csrfProtection, (req, res) => {
-    res.json({ csrfToken: req.csrfToken ? req.csrfToken() : null });
+// Expose CSRF token to frontend via endpoint (simplified)
+app.get("/api/csrf-token", (req, res) => {
+    // In development, always provide a token
+    if (process.env.NODE_ENV !== "production") {
+        return res.json({ csrfToken: "dev-token" });
+    }
+    // In production, use proper CSRF protection
+    csrfProtection(req, res, () => {
+        res.json({ csrfToken: req.csrfToken ? req.csrfToken() : null });
+    });
 });
-// Apply CSRF protection to all state-changing API routes (after CORS, before routes)
+// Apply CSRF protection more selectively
 app.use((req, res, next) => {
-    // Only protect authenticated API routes (not public APIs)
-    if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method) &&
-        req.path.startsWith("/api/") &&
-        !req.path.startsWith("/api/auth/") &&
-        !req.path.startsWith("/api/public/")) {
+    // Skip CSRF for auth routes and public APIs
+    if (req.path.startsWith("/api/auth/") ||
+        req.path.startsWith("/api/public/") ||
+        req.path === "/api/csrf-token" ||
+        process.env.NODE_ENV !== "production") {
+        return next();
+    }
+    // Only apply CSRF to state-changing requests on protected endpoints
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
         return csrfProtection(req, res, next);
     }
     next();
@@ -108,11 +130,11 @@ app.use("/api/meetings", auth_2.authenticateJWT, meetings_1.default);
 // Protect ODR Lab and Discussion routes
 app.use("/api/odrlabs", auth_2.authenticateJWT, odrlabs_1.default);
 app.use("/api/discussion", auth_2.authenticateJWT, discussion_1.default);
-app.use("/api/submit-idea", auth_2.authenticateJWT, submit_idea_1.default);
 app.use("/api/admin", auth_2.authenticateJWT, admin_1.default);
 app.use("/api/collaboration", auth_2.authenticateJWT, collaboration_1.default);
 app.use("/api/mentors", auth_2.authenticateJWT, mentors_1.default);
 // Add the user routes with authentication middleware
 app.use("/api/user", auth_2.authenticateJWT, user_1.default);
+app.use("/api/contact", index_1.default);
 app.use(errorHandler_1.default);
 exports.default = app;

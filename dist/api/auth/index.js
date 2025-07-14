@@ -15,13 +15,17 @@ const refresh_token_1 = __importDefault(require("./refresh-token"));
 const auth_1 = require("../../middleware/auth");
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const router = express_1.default.Router();
-// Rate limiters
+// Rate limiters - more reasonable limits for development and testing
 const authLimiter = (0, express_rate_limit_1.default)({
     windowMs: 60 * 1000, // 1 minute
-    max: 5,
+    max: process.env.NODE_ENV === "production" ? 5 : 50, // More lenient in development
     message: { error: "Too many requests, please try again after a minute." },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => {
+        // Skip rate limiting for development
+        return process.env.NODE_ENV !== "production";
+    }
 });
 // Public routes - no authentication required
 router.post("/login", authLimiter, login_1.default);

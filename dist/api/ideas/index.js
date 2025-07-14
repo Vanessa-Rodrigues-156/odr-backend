@@ -7,6 +7,7 @@ const express_1 = require("express");
 const zod_1 = require("zod");
 const prisma_1 = __importDefault(require("../../lib/prisma"));
 const auth_1 = require("../../middleware/auth");
+const auditLog_1 = require("../../lib/auditLog");
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 // Create separate routers for different auth levels
 const router = (0, express_1.Router)();
@@ -34,13 +35,17 @@ const ensureAdmin = (req, res, next) => {
 // Apply authentication middleware to their respective routers
 authenticatedRouter.use(ensureAuthenticated);
 adminRouter.use(ensureAdmin);
-// Rate limiter for form submissions (20 requests per 10 minutes)
+// Rate limiter for form submissions - more reasonable limits
 const formLimiter = (0, express_rate_limit_1.default)({
     windowMs: 10 * 60 * 1000, // 10 minutes
-    max: 20,
+    max: process.env.NODE_ENV === "production" ? 20 : 100, // More lenient in development
     message: { error: "Too many form submissions, please try again later." },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => {
+        // Skip rate limiting for development
+        return process.env.NODE_ENV !== "production";
+    }
 });
 // --- IDEA SUBMISSION FLOW ---
 // Submit a new idea (goes to IdeaSubmission, not Idea)
@@ -332,8 +337,33 @@ authenticatedRouter.delete("/:id", async (req, res) => {
     if (idea.ownerId !== req.user.id && req.user.userRole !== "ADMIN") {
         return res.status(403).json({ error: "Not authorized" });
     }
-    await prisma_1.default.idea.delete({ where: { id } });
-    res.json({ success: true });
+    try {
+        await prisma_1.default.idea.delete({ where: { id } });
+        await (0, auditLog_1.logAuditEvent)({
+            action: 'DELETE_IDEA',
+            userId: req.user.id,
+            userRole: req.user.userRole,
+            targetId: id,
+            targetType: 'IDEA',
+            success: true,
+            message: `Idea deleted by user ${req.user.id}`,
+            ipAddress: req.ip,
+        });
+        res.json({ success: true });
+    }
+    catch (error) {
+        await (0, auditLog_1.logAuditEvent)({
+            action: 'DELETE_IDEA',
+            userId: req.user.id,
+            userRole: req.user.userRole,
+            targetId: id,
+            targetType: 'IDEA',
+            success: false,
+            message: error instanceof Error ? error.message : String(error),
+            ipAddress: req.ip,
+        });
+        res.status(500).json({ error: "Failed to delete idea." });
+    }
 });
 // List collaborators
 router.get("/:id/collaborators", async (req, res) => {

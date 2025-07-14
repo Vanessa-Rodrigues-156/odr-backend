@@ -38,13 +38,17 @@ const ensureAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
 authenticatedRouter.use(ensureAuthenticated);
 adminRouter.use(ensureAdmin);
 
-// Rate limiter for form submissions (20 requests per 10 minutes)
+// Rate limiter for form submissions - more reasonable limits
 const formLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes
-  max: 20,
+  max: process.env.NODE_ENV === "production" ? 20 : 100, // More lenient in development
   message: { error: "Too many form submissions, please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for development
+    return process.env.NODE_ENV !== "production";
+  }
 });
 
 // --- IDEA SUBMISSION FLOW ---
