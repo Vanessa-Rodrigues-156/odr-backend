@@ -1,3 +1,15 @@
+model AuditLog {
+  id          String   @id @default(uuid())
+  action      String
+  userId      String?
+  userRole    UserRole?
+  targetId    String?
+  targetType  String?
+  success     Boolean
+  message     String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+}
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 

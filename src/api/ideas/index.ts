@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import prisma from "../../lib/prisma";
 import { authenticateJWT, AuthRequest } from "../../middleware/auth";
+import { logAuditEvent } from "../../lib/auditLog";
 import rateLimit from "express-rate-limit";
 
 // Create separate routers for different auth levels
@@ -346,8 +347,32 @@ authenticatedRouter.delete("/:id", async (req: AuthRequest, res) => {
   if (idea.ownerId !== req.user!.id && req.user!.userRole !== "ADMIN") {
     return res.status(403).json({ error: "Not authorized" });
   }
-  await prisma.idea.delete({ where: { id } });
-  res.json({ success: true });
+  try {
+    await prisma.idea.delete({ where: { id } });
+    await logAuditEvent({
+      action: 'DELETE_IDEA',
+      userId: req.user!.id,
+      userRole: req.user!.userRole as any,
+      targetId: id,
+      targetType: 'IDEA',
+      success: true,
+      message: `Idea deleted by user ${req.user!.id}`,
+      ipAddress: req.ip,
+    });
+    res.json({ success: true });
+  } catch (error) {
+    await logAuditEvent({
+      action: 'DELETE_IDEA',
+      userId: req.user!.id,
+      userRole: req.user!.userRole as any,
+      targetId: id,
+      targetType: 'IDEA',
+      success: false,
+      message: error instanceof Error ? error.message : String(error),
+      ipAddress: req.ip,
+    });
+    res.status(500).json({ error: "Failed to delete idea." });
+  }
 });
 
 // List collaborators

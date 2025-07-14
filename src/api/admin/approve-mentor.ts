@@ -1,6 +1,7 @@
 import { Router } from "express";
 import prisma from "../../lib/prisma";
 import { authenticateJWT, AuthRequest } from "../../middleware/auth";
+import { logAuditEvent } from "../../lib/auditLog";
 
 const router = Router();
 router.use(authenticateJWT);
@@ -62,38 +63,27 @@ router.get("/", async (req: AuthRequest, res) => {
 
 // POST - Approve a mentor
 router.post("/", async (req: AuthRequest, res) => {
+  const { userId } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: "User ID is required" });
+  }
+  let success = false;
+  let message = '';
   try {
-    const { userId } = req.body;
-    
-    if (!userId) {
-      return res.status(400).json({ error: "User ID is required" });
-    }
-    
-    console.log(`[Admin] Processing approval for mentor: ${userId}`);
-
-    // Use a transaction to ensure consistency
     const result = await prisma.$transaction(async (tx) => {
-      // Find the user who has applied for mentor status
       const user = await tx.user.findUnique({
-        where: { 
-          id: userId
-        },
+        where: { id: userId },
         include: { mentor: true }
       });
-
       if (!user) {
         throw new Error(`User with ID ${userId} not found or is not a mentor`);
       }
-
       if (!user.mentor) {
         throw new Error(`Mentor data not found for user ${userId}`);
       }
-
       if (user.mentor.approved) {
         throw new Error(`Mentor with ID ${userId} is already approved`);
       }
-
-      // Approve the mentor
       const updatedMentor = await tx.mentor.update({
         where: { userId: userId },
         data: {
@@ -102,28 +92,31 @@ router.post("/", async (req: AuthRequest, res) => {
           reviewedBy: req.user?.id,
         }
       });
-      
-      // Change user role from OTHER to MENTOR
       const updatedUser = await tx.user.update({
         where: { id: userId },
         data: {
-          userRole: "MENTOR"  // Promote to MENTOR role
+          userRole: "MENTOR"
         }
       });
-      
-      // Remove entry from "other" table as they're now a mentor
       await tx.other.deleteMany({
         where: { userId: userId }
       }).catch(err => {
         console.warn("Could not delete from 'other' table", err);
-        // Continue with the process even if this fails
       });
-
       return { user: updatedUser, mentor: updatedMentor };
     });
-
-    console.log(`[Admin] Successfully approved mentor: ${userId}`);
-    
+    success = true;
+    message = 'Mentor approved.';
+    await logAuditEvent({
+      action: 'APPROVE_MENTOR',
+      userId: req.user?.id,
+      userRole: req.user?.userRole as any,
+      targetId: userId,
+      targetType: 'MENTOR',
+      success,
+      message,
+      ipAddress: req.ip,
+    });
     res.status(200).json({
       success: true,
       user: {
@@ -132,19 +125,24 @@ router.post("/", async (req: AuthRequest, res) => {
       }
     });
   } catch (error) {
-    // Error handling
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[Admin] Error approving mentor: ${errorMessage}`);
-    console.error(error);
-
-    // Determine appropriate status code
+    message = error instanceof Error ? error.message : String(error);
+    await logAuditEvent({
+      action: 'APPROVE_MENTOR',
+      userId: req.user?.id,
+      userRole: req.user?.userRole as any,
+      targetId: userId,
+      targetType: 'MENTOR',
+      success: false,
+      message,
+      ipAddress: req.ip,
+    });
+    const errorMessage = message;
     let statusCode = 500;
     if (errorMessage.includes("not found")) {
       statusCode = 404;
     } else if (errorMessage.includes("already approved")) {
       statusCode = 400;
     }
-
     res.status(statusCode).json({ 
       error: "Failed to approve mentor", 
       details: errorMessage
@@ -154,35 +152,24 @@ router.post("/", async (req: AuthRequest, res) => {
 
 // POST - Reject a mentor
 router.post("/reject", async (req: AuthRequest, res) => {
+  const { userId, reason } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: "User ID is required" });
+  }
+  let success = false;
+  let message = '';
   try {
-    const { userId, reason } = req.body;
-    
-    if (!userId) {
-      return res.status(400).json({ error: "User ID is required" });
-    }
-    
-    console.log(`[Admin] Processing rejection for mentor: ${userId}, reason: ${reason || 'Not provided'}`);
-
-    // Use a transaction for consistency
     const result = await prisma.$transaction(async (tx) => {
-      // Find the user
       const user = await tx.user.findUnique({
-        where: { 
-          id: userId,
-          userRole: "MENTOR" 
-        },
+        where: { id: userId, userRole: "MENTOR" },
         include: { mentor: true }
       });
-
       if (!user) {
         throw new Error(`User with ID ${userId} not found or is not a mentor`);
       }
-
       if (!user.mentor) {
         throw new Error(`Mentor data not found for user ${userId}`);
       }
-
-      // Mark as rejected
       const updatedMentor = await tx.mentor.update({
         where: { userId: userId },
         data: {
@@ -192,22 +179,15 @@ router.post("/reject", async (req: AuthRequest, res) => {
           reviewedBy: req.user?.id,
         }
       });
-
-      // Change user role from MENTOR to OTHER
       const updatedUser = await tx.user.update({
         where: { id: userId },
         data: {
-          userRole: "OTHER"  // Demote to OTHER role
+          userRole: "OTHER"
         }
       });
-
-      // Create entry in "other" table with mentor data to preserve information
-      // Check if entry exists first
       const existingOther = await tx.other.findUnique({
         where: { userId: userId }
       });
-
-      // Only create if doesn't exist
       if (!existingOther) {
         await tx.other.create({
           data: {
@@ -218,25 +198,41 @@ router.post("/reject", async (req: AuthRequest, res) => {
           }
         });
       }
-
       return { user: updatedUser, mentor: updatedMentor };
     });
-
-    console.log(`[Admin] Successfully rejected mentor: ${userId} and changed role to OTHER`);
-    
+    success = true;
+    message = 'Mentor rejected.';
+    await logAuditEvent({
+      action: 'REJECT_MENTOR',
+      userId: req.user?.id,
+      userRole: req.user?.userRole as any,
+      targetId: userId,
+      targetType: 'MENTOR',
+      success,
+      message,
+      ipAddress: req.ip,
+    });
     res.status(200).json({
       success: true,
       message: "Mentor application has been rejected and user role updated"
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[Admin] Error rejecting mentor: ${errorMessage}`);
-    
+    message = error instanceof Error ? error.message : String(error);
+    await logAuditEvent({
+      action: 'REJECT_MENTOR',
+      userId: req.user?.id,
+      userRole: req.user?.userRole as any,
+      targetId: userId,
+      targetType: 'MENTOR',
+      success: false,
+      message,
+      ipAddress: req.ip,
+    });
+    const errorMessage = message;
     let statusCode = 500;
     if (errorMessage.includes("not found")) {
       statusCode = 404;
     }
-    
     res.status(statusCode).json({ 
       error: "Failed to reject mentor", 
       details: errorMessage

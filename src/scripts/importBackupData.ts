@@ -1,4 +1,5 @@
 import { PrismaClient, UserRole, MentorType } from '@prisma/client';
+import { logAuditEvent } from '../lib/auditLog';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
@@ -84,6 +85,17 @@ async function importBackupData() {
             createdAt: user.createdAt,
             updatedAt: new Date()
           }
+        });
+
+        // Audit log: user upsert
+        await logAuditEvent({
+          action: 'USER_MIGRATION',
+          userId: user.id,
+          userRole: user.userRole,
+          targetId: user.id,
+          targetType: 'USER',
+          success: true,
+          message: `User migrated: ${user.email}`,
         });
 
         // Based on user role, create appropriate type record
@@ -203,6 +215,15 @@ async function importBackupData() {
         console.log(`Successfully migrated user: ${user.email}`);
       } catch (error) {
         console.error(`Error migrating user ${user.email}:`, error);
+        await logAuditEvent({
+          action: 'USER_MIGRATION',
+          userId: user.id,
+          userRole: user.userRole,
+          targetId: user.id,
+          targetType: 'USER',
+          success: false,
+          message: `Error migrating user: ${user.email} - ${error instanceof Error ? error.message : String(error)}`,
+        });
       }
     }
     

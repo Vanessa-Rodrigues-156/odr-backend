@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import prisma from "../../lib/prisma";
+import { logAuditEvent } from "../../lib/auditLog";
 import { authenticateJWT } from "../../middleware/auth";
 import rateLimit from "express-rate-limit";
 
@@ -70,6 +71,8 @@ export async function getUserProfile(req: Request, res: Response) {
 
 // PUT /api/user/profile - Update user profile
 export async function updateUserProfile(req: Request, res: Response) {
+  let success = false;
+  let message = '';
   try {
     const userId = (req as any).user?.id;
     if (!userId) {
@@ -170,6 +173,8 @@ export async function updateUserProfile(req: Request, res: Response) {
       where: { id: userId },
       data: updateData
     });
+    success = true;
+    message = 'Profile updated successfully';
 
     // Update role-specific data based on user's role
     if (existingUser.userRole === 'INNOVATOR') {
@@ -352,11 +357,32 @@ export async function updateUserProfile(req: Request, res: Response) {
       }
     });
 
+    await logAuditEvent({
+      action: 'UPDATE_PROFILE',
+      userId: userId,
+      userRole: existingUser.userRole as any,
+      targetId: userId,
+      targetType: 'USER',
+      success,
+      message,
+      ipAddress: req.ip,
+    });
     res.json({
       message: "Profile updated successfully",
       user: finalUser
     });
   } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+    await logAuditEvent({
+      action: 'UPDATE_PROFILE',
+      userId: (req as any).user?.id,
+      userRole: undefined,
+      targetId: (req as any).user?.id,
+      targetType: 'USER',
+      success: false,
+      message,
+      ipAddress: req.ip,
+    });
     console.error("Error updating user profile:", error);
     res.status(500).json({ error: "Internal server error" });
   }
