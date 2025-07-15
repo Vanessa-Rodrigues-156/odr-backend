@@ -122,8 +122,8 @@ export default async function googleSignInHandler(req: Request, res: Response) {
     if (token) {
       res.cookie("access_token", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+        secure: true, // Always secure in production
+        sameSite: "none" as const, // Allow cross-origin cookies for production
         path: "/",
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });

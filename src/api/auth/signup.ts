@@ -42,8 +42,8 @@ const signupSchema = z.object({
 function getCookieOptions(isRefresh = false) {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
+    secure: true, // Always secure in production
+    sameSite: "none" as const, // Allow cross-origin cookies for production
     path: "/",
     ...(isRefresh ? { maxAge: 7 * 24 * 60 * 60 * 1000 } : { maxAge: 15 * 60 * 1000 })
   };

@@ -19,7 +19,7 @@ function getCookieOptions(isRefresh = false) {
   return {
     httpOnly: true,
     secure: true, // Always set Secure for HTTPS (should be enforced in production)
-    sameSite: "strict" as const, // Prevent CSRF by only sending cookie in first-party context
+    sameSite: "none" as const, // Allow cross-origin cookies for production (Netlify <-> Render)
     path: "/",
     ...(isRefresh ? { maxAge: 7 * 24 * 60 * 60 * 1000 } : { maxAge: 15 * 60 * 1000 }) // 7d for refresh, 15m for access
   };

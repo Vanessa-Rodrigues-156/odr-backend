@@ -6,7 +6,7 @@ function getCookieOptions(isRefresh = false) {
   return {
     httpOnly: true,
     secure: true, // Always set Secure for HTTPS
-    sameSite: "strict" as const, // Prevent CSRF
+    sameSite: "none" as const, // Allow cross-origin cookies for production
     path: "/",
     ...(isRefresh ? { maxAge: 7 * 24 * 60 * 60 * 1000 } : { maxAge: 15 * 60 * 1000 })
   };
