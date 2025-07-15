@@ -43,8 +43,8 @@ const signupSchema = zod_1.z.object({
 function getCookieOptions(isRefresh = false) {
     return {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+        secure: true, // Always secure in production
+        sameSite: "none", // Allow cross-origin cookies for production
         path: "/",
         ...(isRefresh ? { maxAge: 7 * 24 * 60 * 60 * 1000 } : { maxAge: 15 * 60 * 1000 })
     };
@@ -234,16 +234,10 @@ async function signupHandler(req, res) {
         );
         res.cookie("access_token", accessToken, getCookieOptions());
         res.cookie("refresh_token", refreshToken, getCookieOptions(true));
-        // For frontend auto-login, return a JWT token as well
-        // const jwt = require("jsonwebtoken");
-        // const token = jwt.sign(
-        //   { id: user.id, email: user.email, userRole: user.userRole },
-        //   process.env.JWT_SECRET,
-        //   { expiresIn: "7d" }
-        // );
         // Fetch the complete user data including type-specific information
         const userData = await getUserWithTypeData(user.id, user.userRole);
-        res.status(201).json({ user: userData });
+        // Always return user data only (never send token in response)
+        return res.status(201).json({ user: userData });
     }
     catch (error) {
         console.error("Error during signup:", error);

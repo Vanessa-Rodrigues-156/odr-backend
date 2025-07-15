@@ -86,7 +86,7 @@ app.use((0, cookie_parser_1.default)());
 const csrfProtection = (0, csurf_1.default)({
     cookie: {
         httpOnly: true,
-        sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+        sameSite: process.env.NODE_ENV === "production" ? "strict" : "none",
         secure: process.env.NODE_ENV === "production",
     },
     ignoreMethods: ["GET", "HEAD", "OPTIONS"],

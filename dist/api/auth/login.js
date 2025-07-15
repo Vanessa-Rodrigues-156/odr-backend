@@ -19,8 +19,8 @@ const loginSchema = zod_1.z.object({
 function getCookieOptions(isRefresh = false) {
     return {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+        secure: true, // Always set Secure for HTTPS (should be enforced in production)
+        sameSite: "none", // Allow cross-origin cookies for production (Netlify <-> Render)
         path: "/",
         ...(isRefresh ? { maxAge: 7 * 24 * 60 * 60 * 1000 } : { maxAge: 15 * 60 * 1000 }) // 7d for refresh, 15m for access
     };
@@ -146,16 +146,16 @@ async function loginHandler(req, res) {
             isMentorApproved,
             mentorRejectionReason
         };
-        // Generate tokens with longer expiration for better UX
-        const accessToken = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, userRole: user.userRole }, jwtSecret, { expiresIn: "24h" } // Increased from 15m to 24h
+        // Generate tokens with secure, short-lived access token
+        const accessToken = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, userRole: user.userRole }, jwtSecret, { expiresIn: "15m" } // Short-lived access token for security
         );
-        const refreshToken = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, userRole: user.userRole }, jwtSecret, { expiresIn: "30d" } // Increased from 7d to 30d
+        const refreshToken = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, userRole: user.userRole }, jwtSecret, { expiresIn: "7d" } // 7 days for refresh
         );
-        // Set cookies
+        // Set cookies with secure flags
         res.cookie("access_token", accessToken, getCookieOptions());
         res.cookie("refresh_token", refreshToken, getCookieOptions(true));
         console.log(`Login successful for user: ${normalizedEmail} with role: ${user.userRole}`);
-        // Return user data only (no token in body)
+        // Always return user data only (never send token in response)
         return res.status(200).json({
             user: userResponseWithMentorStatus,
             message: "Login successful"
