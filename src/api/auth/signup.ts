@@ -270,19 +270,15 @@ export default async function signupHandler(req: Request, res: Response) {
     );
     res.cookie("access_token", accessToken, getCookieOptions());
     res.cookie("refresh_token", refreshToken, getCookieOptions(true));
-
-    // For frontend auto-login, return a JWT token as well
-    // const jwt = require("jsonwebtoken");
-    // const token = jwt.sign(
-    //   { id: user.id, email: user.email, userRole: user.userRole },
-    //   process.env.JWT_SECRET,
-    //   { expiresIn: "7d" }
-    // );
-
     // Fetch the complete user data including type-specific information
     const userData = await getUserWithTypeData(user.id, user.userRole);
 
-    res.status(201).json({ user: userData });
+    // Return user data and token in development, user data only in production
+    if (process.env.NODE_ENV !== "production") {
+      return res.status(201).json({ user: userData, token: accessToken });
+    } else {
+      return res.status(201).json({ user: userData });
+    }
   } catch (error) {
     console.error("Error during signup:", error);
     res.status(500).json({ error: "Error creating user account." });

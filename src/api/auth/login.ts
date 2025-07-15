@@ -176,11 +176,19 @@ export default async function loginHandler(req: Request, res: Response) {
     
     console.log(`Login successful for user: ${normalizedEmail} with role: ${user.userRole}`);
     
-    // Return user data only (no token in body)
-    return res.status(200).json({ 
-      user: userResponseWithMentorStatus, 
-      message: "Login successful" 
-    });
+    // Return user data and token in development, user data only in production
+    if (process.env.NODE_ENV !== "production") {
+      return res.status(200).json({ 
+        user: userResponseWithMentorStatus, 
+        token: accessToken,
+        message: "Login successful" 
+      });
+    } else {
+      return res.status(200).json({ 
+        user: userResponseWithMentorStatus, 
+        message: "Login successful" 
+      });
+    }
   } catch (err) {
     console.error("Login error:", err);
     return res.status(500).json({ error: "Internal server error" });
