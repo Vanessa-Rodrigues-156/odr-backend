@@ -97,7 +97,7 @@ app.use(cookieParser());
 const csrfProtection = csurf({
   cookie: {
     httpOnly: true,
-    sameSite: process.env.NODE_ENV === "production" ? "strict" : "none",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "none",
     secure: process.env.NODE_ENV === "production",
   },
   ignoreMethods: ["GET", "HEAD", "OPTIONS"],
