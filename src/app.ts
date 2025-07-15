@@ -18,7 +18,10 @@ import cookieParser from "cookie-parser";
 import crypto from "crypto";
 import contactRoutes from "./api/contact/index";
 
+
 const app = express();
+// Trust first proxy (needed for correct client IP with X-Forwarded-For headers)
+app.set('trust proxy', 1);
 
 // --- CSP Nonce Middleware ---
 app.use((req: Request, res: Response, next: NextFunction) => {

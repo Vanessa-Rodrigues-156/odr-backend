@@ -213,8 +213,11 @@ router.get("/approved", async (req, res) => {
     }
 });
 // Get idea details (for discussion board, must be approved)
-router.get("/:id", async (req, res) => {
+// Get single idea by ID (requires authentication)
+authenticatedRouter.get("/:id", async (req, res) => {
     try {
+        // Debug: Log the authenticated user
+        console.log("[Ideas/:id] Request from user:", req.user?.email, "Role:", req.user?.userRole);
         const idea = await prisma_1.default.idea.findUnique({
             where: { id: req.params.id, approved: true },
             include: {

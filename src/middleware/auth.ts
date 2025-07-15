@@ -56,16 +56,21 @@ export const authenticateJWT = async (
     // Get token from Authorization header (primary method)
     let token = null;
     const authHeader = req.headers.authorization;
+    console.log("[JWT] Incoming Authorization header:", authHeader);
     if (authHeader && authHeader.startsWith("Bearer ")) {
       token = authHeader.split(" ")[1];
     }
-    
+
     // Fallback to cookie if no Bearer token
     if (!token) {
       token = req.cookies?.access_token;
+      if (token) {
+        console.log("[JWT] Using token from cookie");
+      }
     }
 
     if (!token) {
+      console.warn("[JWT] No access token found in Authorization header or cookie");
       return res.status(401).json({ error: "Access token required" });
     }
 
@@ -75,11 +80,24 @@ export const authenticateJWT = async (
       return res.status(500).json({ error: "Server configuration error" });
     }
 
-    const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
-    
+    let decoded: JwtPayload;
+    try {
+      decoded = jwt.verify(token, jwtSecret) as JwtPayload;
+    } catch (err: any) {
+      console.error("[JWT] Token verification failed:", err.message);
+      if (err.name === "TokenExpiredError") {
+        return res.status(401).json({ error: "Token expired" });
+      }
+      if (err.name === "JsonWebTokenError") {
+        return res.status(401).json({ error: "Invalid or malformed token" });
+      }
+      return res.status(401).json({ error: "Authentication failed" });
+    }
+
     // Extract user ID from token
     const userId = decoded.id || decoded.userId || decoded.sub;
     if (!userId) {
+      console.warn("[JWT] Token decoded but missing user ID field:", decoded);
       return res.status(401).json({
         error: "Invalid token format - missing user ID",
       });
@@ -110,7 +128,7 @@ export const authenticateJWT = async (
     });
 
     if (!user) {
-      console.log(`User not found for id: ${userId}`);
+      console.log(`[JWT] User not found for id: ${userId}`);
       return res.status(401).json({ error: "User not found" });
     }
 

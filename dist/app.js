@@ -23,6 +23,8 @@ const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const crypto_1 = __importDefault(require("crypto"));
 const index_1 = __importDefault(require("./api/contact/index"));
 const app = (0, express_1.default)();
+// Trust first proxy (needed for correct client IP with X-Forwarded-For headers)
+app.set('trust proxy', 1);
 // --- CSP Nonce Middleware ---
 app.use((req, res, next) => {
     const nonce = crypto_1.default.randomBytes(16).toString("base64");
