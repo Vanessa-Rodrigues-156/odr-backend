@@ -118,7 +118,16 @@ export default async function googleSignInHandler(req: Request, res: Response) {
       };
     }
     
-    // Return appropriate response based on profile completion status
+    // Always set JWT as cookie (if profile complete), never send token in response
+    if (token) {
+      res.cookie("access_token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+    }
     return res.status(200).json({
       user: {
         id: user.id,
@@ -132,7 +141,6 @@ export default async function googleSignInHandler(req: Request, res: Response) {
         ...roleSpecificData,
       },
       needsProfileCompletion,
-      token,
       message: needsProfileCompletion 
         ? "Profile completion required" 
         : "Sign in successful",

@@ -5,8 +5,8 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 function getCookieOptions(isRefresh = false) {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
+    secure: true, // Always set Secure for HTTPS
+    sameSite: "strict" as const, // Prevent CSRF
     path: "/",
     ...(isRefresh ? { maxAge: 7 * 24 * 60 * 60 * 1000 } : { maxAge: 15 * 60 * 1000 })
   };
@@ -23,13 +23,19 @@ export default async function refreshTokenHandler(req: Request, res: Response) {
   }
   try {
     const payload = jwt.verify(refreshToken, jwtSecret) as JwtPayload;
-    // Issue new access token
+    // Issue new access token (15m) and refresh token (7d)
     const accessToken = jwt.sign(
       { id: payload.id, email: payload.email, userRole: payload.userRole },
       jwtSecret,
       { expiresIn: "15m" }
     );
+    const newRefreshToken = jwt.sign(
+      { id: payload.id, email: payload.email, userRole: payload.userRole },
+      jwtSecret,
+      { expiresIn: "7d" }
+    );
     res.cookie("access_token", accessToken, getCookieOptions());
+    res.cookie("refresh_token", newRefreshToken, getCookieOptions(true));
     return res.status(200).json({ success: true });
   } catch (err) {
     return res.status(401).json({ error: "Invalid or expired refresh token" });

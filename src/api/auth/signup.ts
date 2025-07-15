@@ -273,12 +273,8 @@ export default async function signupHandler(req: Request, res: Response) {
     // Fetch the complete user data including type-specific information
     const userData = await getUserWithTypeData(user.id, user.userRole);
 
-    // Return user data and token in development, user data only in production
-    if (process.env.NODE_ENV !== "production") {
-      return res.status(201).json({ user: userData, token: accessToken });
-    } else {
-      return res.status(201).json({ user: userData });
-    }
+    // Always return user data only (never send token in response)
+    return res.status(201).json({ user: userData });
   } catch (error) {
     console.error("Error during signup:", error);
     res.status(500).json({ error: "Error creating user account." });

@@ -18,8 +18,8 @@ const loginSchema = z.object({
 function getCookieOptions(isRefresh = false) {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
+    secure: true, // Always set Secure for HTTPS (should be enforced in production)
+    sameSite: "strict" as const, // Prevent CSRF by only sending cookie in first-party context
     path: "/",
     ...(isRefresh ? { maxAge: 7 * 24 * 60 * 60 * 1000 } : { maxAge: 15 * 60 * 1000 }) // 7d for refresh, 15m for access
   };
@@ -158,37 +158,29 @@ export default async function loginHandler(req: Request, res: Response) {
       mentorRejectionReason
     };
 
-    // Generate tokens with longer expiration for better UX
+    // Generate tokens with secure, short-lived access token
     const accessToken = jwt.sign(
       { id: user.id, email: user.email, userRole: user.userRole },
       jwtSecret,
-      { expiresIn: "24h" } // Increased from 15m to 24h
+      { expiresIn: "15m" } // Short-lived access token for security
     );
     const refreshToken = jwt.sign(
       { id: user.id, email: user.email, userRole: user.userRole },
       jwtSecret,
-      { expiresIn: "30d" } // Increased from 7d to 30d
+      { expiresIn: "7d" } // 7 days for refresh
     );
 
-    // Set cookies
+    // Set cookies with secure flags
     res.cookie("access_token", accessToken, getCookieOptions());
     res.cookie("refresh_token", refreshToken, getCookieOptions(true));
     
     console.log(`Login successful for user: ${normalizedEmail} with role: ${user.userRole}`);
     
-    // Return user data and token in development, user data only in production
-    if (process.env.NODE_ENV !== "production") {
-      return res.status(200).json({ 
-        user: userResponseWithMentorStatus, 
-        token: accessToken,
-        message: "Login successful" 
-      });
-    } else {
-      return res.status(200).json({ 
-        user: userResponseWithMentorStatus, 
-        message: "Login successful" 
-      });
-    }
+    // Always return user data only (never send token in response)
+    return res.status(200).json({ 
+      user: userResponseWithMentorStatus, 
+      message: "Login successful" 
+    });
   } catch (err) {
     console.error("Login error:", err);
     return res.status(500).json({ error: "Internal server error" });
