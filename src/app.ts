@@ -51,6 +51,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // Apply industry-standard HTTP security headers
 app.use(securityHeaders); // Helmet: CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, HSTS
 
+// --- CORS Middleware: Always set for all routes, including /api/csrf-token ---
 app.use(
   cors({
     origin: [
@@ -59,33 +60,33 @@ app.use(
       "https://odrlab.netlify.app",
       "https://api.odrlab.com",
       "http://localhost:3000",
-      
     ],
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "x-csrf-token"],
     credentials: true,
   })
 );
 // Explicitly handle preflight OPTIONS requests for all routes
+
+// Explicitly handle preflight OPTIONS requests for all routes
 app.options("*", cors());
 
-// Manual fallback for OPTIONS requests (for maximum compatibility)
+// Manual fallback for OPTIONS requests (legacy/edge-case clients)
 app.use((req, res, next) => {
   if (req.method === "OPTIONS") {
-    const origin = req.headers.origin;
-    if (
-      origin === "https://odrlab.com" ||
-      origin === "https://www.odrlab.com" ||
-      origin === "https://api.odrlab.com" ||
-      origin === "http://localhost:3000" ||
-      origin === "https://odrlab.netlify.app"
-    ) {
-      res.header("Access-Control-Allow-Origin", origin);
-    }
-    res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE");
+    const allowedOrigins = [
+      "https://odrlab.com",
+      "https://www.odrlab.com",
+      "https://odrlab.netlify.app",
+      "https://api.odrlab.com",
+      "http://localhost:3000",
+    ];
+    const origin = typeof req.headers.origin === "string" ? req.headers.origin : "";
+    res.header("Access-Control-Allow-Origin", allowedOrigins.includes(origin) ? origin : "");
+    res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
     res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-csrf-token");
     res.header("Access-Control-Allow-Credentials", "true");
-    return res.sendStatus(200);
+    return res.sendStatus(204);
   }
   next();
 });
