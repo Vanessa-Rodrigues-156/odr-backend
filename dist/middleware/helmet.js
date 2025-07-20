@@ -12,7 +12,7 @@ const cspDirectives = isProduction
         scriptSrc: ["'self'", "'unsafe-inline'", "https://www.googletagmanager.com"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "https://www.google-analytics.com"],
-        connectSrc: ["'self'", "https://api.odrlab.com", "https://odr-backend.onrender.com"],
+        connectSrc: ["'self'", "https://odr-backend.onrender.com", "https://api.odrlab.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         frameSrc: ["'self'"],
     }

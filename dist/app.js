@@ -52,9 +52,9 @@ app.use((0, cors_1.default)({
     origin: [
         "https://odrlab.com",
         "https://www.odrlab.com",
+        "https://odrlab.netlify.app",
         "https://api.odrlab.com",
         "http://localhost:3000",
-        "https://odrlab.netlify.app"
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization", "x-csrf-token"],
@@ -86,7 +86,7 @@ app.use((0, cookie_parser_1.default)());
 const csrfProtection = (0, csurf_1.default)({
     cookie: {
         httpOnly: true,
-        sameSite: process.env.NODE_ENV === "production" ? "strict" : "none",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "none",
         secure: process.env.NODE_ENV === "production",
     },
     ignoreMethods: ["GET", "HEAD", "OPTIONS"],
