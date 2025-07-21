@@ -1,7 +1,8 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import prisma from "../../lib/prisma";
-import { authenticateJWT, AuthRequest } from "../../middleware/auth";
+import { authenticateJWT } from "../../middleware/auth";
+import { AuthRequest } from "../../types/auth";
 import { logAuditEvent } from "../../lib/auditLog";
 import rateLimit from "express-rate-limit";
 

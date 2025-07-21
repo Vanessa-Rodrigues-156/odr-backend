@@ -67,6 +67,7 @@ const authenticateJWT = async (req, res, next) => {
                 contactNumber: true,
                 city: true,
                 country: true,
+                imageAvatar: true,
                 createdAt: true,
                 // Include role-specific models
                 innovator: true,
@@ -132,14 +133,23 @@ const authenticateJWT = async (req, res, next) => {
             isMentorApproved = user.mentor.approved;
             mentorRejectionReason = user.mentor.rejectionReason;
         }
-        // Merge base user data with role-specific data and mentor status
-        req.user = {
-            ...user,
+        // Convert Date to string and properly cast userRole for consistency
+        const userData = {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            userRole: user.userRole,
+            contactNumber: user.contactNumber,
+            city: user.city,
+            country: user.country,
+            imageAvatar: user.imageAvatar,
+            createdAt: user.createdAt.toISOString(),
             ...roleData,
             hasMentorApplication,
             isMentorApproved,
             mentorRejectionReason
         };
+        req.user = userData;
         next();
     }
     catch (err) {

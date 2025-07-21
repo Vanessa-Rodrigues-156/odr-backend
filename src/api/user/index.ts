@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { AuthRequest } from "../../middleware/auth";
+import { AuthRequest } from "../../types/auth";
 import prisma from "../../lib/prisma";
 import profileHandler from "./profile";
 import rateLimit from "express-rate-limit";
