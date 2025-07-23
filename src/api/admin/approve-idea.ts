@@ -1,6 +1,7 @@
 import { Router } from "express";
 import prisma from "../../lib/prisma";
-import { authenticateJWT, AuthRequest } from "../../middleware/auth";
+import { authenticateJWT } from "../../middleware/auth";
+import { AuthRequest } from "../../types/auth";
 
 const router = Router();
 router.use(authenticateJWT);

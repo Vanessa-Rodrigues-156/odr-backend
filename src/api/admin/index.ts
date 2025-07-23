@@ -1,5 +1,6 @@
 import { Router, Response, NextFunction } from "express";
-import { authenticateJWT, AuthRequest } from "../../middleware/auth";
+import { authenticateJWT } from "../../middleware/auth";
+import { AuthRequest } from "../../types/auth";
 import prisma from "../../lib/prisma";
 import usersRoutes from "./users";
 import analyticsRoutes from "./analytics";

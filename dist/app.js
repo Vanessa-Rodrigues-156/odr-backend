@@ -48,35 +48,38 @@ app.use((req, res, next) => {
 });
 // Apply industry-standard HTTP security headers
 app.use(helmet_1.default); // Helmet: CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, HSTS
+// --- CORS Middleware: Always set for all routes, including /api/csrf-token ---
 app.use((0, cors_1.default)({
     origin: [
         "https://odrlab.com",
         "https://www.odrlab.com",
+        "https://odrlab.netlify.app",
         "https://api.odrlab.com",
         "http://localhost:3000",
-        "https://odrlab.netlify.app"
     ],
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "x-csrf-token"],
     credentials: true,
 }));
 // Explicitly handle preflight OPTIONS requests for all routes
+// Explicitly handle preflight OPTIONS requests for all routes
 app.options("*", (0, cors_1.default)());
-// Manual fallback for OPTIONS requests (for maximum compatibility)
+// Manual fallback for OPTIONS requests (legacy/edge-case clients)
 app.use((req, res, next) => {
     if (req.method === "OPTIONS") {
-        const origin = req.headers.origin;
-        if (origin === "https://odrlab.com" ||
-            origin === "https://www.odrlab.com" ||
-            origin === "https://api.odrlab.com" ||
-            origin === "http://localhost:3000" ||
-            origin === "https://odrlab.netlify.app") {
-            res.header("Access-Control-Allow-Origin", origin);
-        }
-        res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE");
+        const allowedOrigins = [
+            "https://odrlab.com",
+            "https://www.odrlab.com",
+            "https://odrlab.netlify.app",
+            "https://api.odrlab.com",
+            "http://localhost:3000",
+        ];
+        const origin = typeof req.headers.origin === "string" ? req.headers.origin : "";
+        res.header("Access-Control-Allow-Origin", allowedOrigins.includes(origin) ? origin : "");
+        res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
         res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-csrf-token");
         res.header("Access-Control-Allow-Credentials", "true");
-        return res.sendStatus(200);
+        return res.sendStatus(204);
     }
     next();
 });
@@ -86,7 +89,7 @@ app.use((0, cookie_parser_1.default)());
 const csrfProtection = (0, csurf_1.default)({
     cookie: {
         httpOnly: true,
-        sameSite: process.env.NODE_ENV === "production" ? "strict" : "none",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "none",
         secure: process.env.NODE_ENV === "production",
     },
     ignoreMethods: ["GET", "HEAD", "OPTIONS"],

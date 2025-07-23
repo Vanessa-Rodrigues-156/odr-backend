@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { AuthRequest } from "../../middleware/auth";
+import { AuthRequest } from "../../types/auth";
 import jwt, { JwtPayload } from "jsonwebtoken";
 
 // Define the structure for token errors

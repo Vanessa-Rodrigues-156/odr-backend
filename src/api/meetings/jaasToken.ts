@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import prisma from "../../lib/prisma";
-import { AuthRequest } from "../../middleware/auth";
+import { AuthRequest } from "../../types/auth";
 
 const JAAS_APP_ID = process.env.JAAS_APP_ID!;
 const JAAS_SECRET = process.env.JAAS_SECRET!; // base64-encoded

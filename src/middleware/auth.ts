@@ -1,51 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import prisma from "../lib/prisma";
-
-export interface AuthUser {
-  id: string;
-  email: string;
-  name: string;
-  userRole: string;
-  contactNumber?: string | null;
-  city?: string | null;
-  country?: string | null;
-  createdAt?: Date;
-
-  // Mentor approval status flags
-  hasMentorApplication?: boolean;
-  isMentorApproved?: boolean;
-  mentorRejectionReason?: string | null;
-
-  // Role-specific fields that might be attached
-  // Innovator fields
-  institution?: string | null;
-  highestEducation?: string | null;
-  courseName?: string | null;
-  courseStatus?: string | null;
-
-  // Mentor fields
-  mentorType?: string | null;
-  organization?: string | null;
-
-  // Faculty fields
-  course?: string | null;
-  mentoring?: boolean | null;
-
-  // Fields that can appear in multiple role types
-  role?: string | null;
-  expertise?: string | null;
-  workplace?: string | null;
-  description?: string | null;
-
-  // Remove fields that no longer exist
-  // odrLabUsage?: string | null;
-}
-
-export interface AuthRequest extends Request {
-  user?: AuthUser;
-  jwtPayload?: JwtPayload;
-}
+import { User, AuthRequest, JWTPayload } from "../types/auth";
 
 export const authenticateJWT = async (
   req: AuthRequest,
@@ -80,9 +36,9 @@ export const authenticateJWT = async (
       return res.status(500).json({ error: "Server configuration error" });
     }
 
-    let decoded: JwtPayload;
+    let decoded: JWTPayload;
     try {
-      decoded = jwt.verify(token, jwtSecret) as JwtPayload;
+      decoded = jwt.verify(token, jwtSecret) as JWTPayload;
     } catch (err: any) {
       console.error("[JWT] Token verification failed:", err.message);
       if (err.name === "TokenExpiredError") {
@@ -118,6 +74,7 @@ export const authenticateJWT = async (
         contactNumber: true,
         city: true,
         country: true,
+        imageAvatar: true,
         createdAt: true,
         // Include role-specific models
         innovator: true,
@@ -186,15 +143,24 @@ export const authenticateJWT = async (
       mentorRejectionReason = user.mentor.rejectionReason;
     }
 
-    // Merge base user data with role-specific data and mentor status
-    req.user = {
-      ...user,
+    // Convert Date to string and properly cast userRole for consistency
+    const userData: User = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      userRole: user.userRole as "INNOVATOR" | "MENTOR" | "ADMIN" | "OTHER" | "FACULTY",
+      contactNumber: user.contactNumber,
+      city: user.city,
+      country: user.country,
+      imageAvatar: user.imageAvatar,
+      createdAt: user.createdAt.toISOString(),
       ...roleData,
       hasMentorApplication,
       isMentorApproved,
       mentorRejectionReason
     };
 
+    req.user = userData;
     next();
   } catch (err: any) {
     console.error("JWT verification error:", err.message);
