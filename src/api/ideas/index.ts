@@ -517,36 +517,28 @@ authenticatedRouter.post("/:id/likes", async (req: AuthRequest, res) => {
 });
 
 // Add route to check if user has liked an idea
-router.get("/:id/likes/check", async (req: AuthRequest, res: Response) => {
+authenticatedRouter.get("/:id/likes/check", async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const userId = req.query.userId as string;
   
-  if (!userId) {
-    return res.status(400).json({ error: "userId is required" });
-  }
-  
+  // Use authenticated user from JWT instead of query parameter
   const like = await prisma.like.findUnique({
-    where: { userId_ideaId: { userId, ideaId: id } },
+    where: { userId_ideaId: { userId: req.user!.id, ideaId: id } },
   });
   
-  res.json({ liked: !!like });
+  res.json({ hasLiked: !!like });
 });
 
 // Add route to get comments liked by a user
-router.get("/:id/comments/liked", async (req: Request, res: Response) => {
+authenticatedRouter.get("/:id/comments/liked", async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const userId = req.query.userId as string;
   
-  if (!userId) {
-    return res.status(400).json({ error: "userId is required" });
-  }
-  
+  // Use authenticated user from JWT instead of query parameter
   const likedComments = await prisma.like.findMany({
-    where: { userId, comment: { ideaId: id } },
+    where: { userId: req.user!.id, comment: { ideaId: id } },
     select: { commentId: true },
   });
   
-  res.json({ likedComments: likedComments.map((lc) => lc.commentId) });
+  res.json({ likedCommentIds: likedComments.map((lc) => lc.commentId) });
 });
 
 // Add route for liking/unliking a comment
