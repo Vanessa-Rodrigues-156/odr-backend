@@ -7,6 +7,7 @@ import googleSignInHandler from "./google-signin";
 import completeProfileHandler from "./complete-profile";
 import checkGoogleUserHandler from "./check-google-user";
 import refreshTokenHandler from "./refresh-token";
+import logoutHandler from "./logout";
 import { authenticateJWT } from "../../middleware/auth";
 import rateLimit from "express-rate-limit";
 
@@ -32,6 +33,7 @@ router.post("/google-signin", googleSignInHandler);
 router.post("/complete-profile", authLimiter, completeProfileHandler);
 router.post("/check-google-user", checkGoogleUserHandler);
 router.post("/refresh-token", refreshTokenHandler);
+router.post("/logout", logoutHandler);
 
 // Protected routes - require authentication
 router.get("/session", authenticateJWT, sessionHandler);
