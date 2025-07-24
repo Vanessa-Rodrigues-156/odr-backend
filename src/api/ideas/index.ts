@@ -314,6 +314,11 @@ authenticatedRouter.get("/:id", async (req: AuthRequest, res: Response) => {
     // Process role-specific fields for owner and team members
     const processedIdea = {
       ...idea,
+      likes: idea.likes.length, // Convert likes array to count
+      comments: idea.comments.map(comment => ({
+        ...comment,
+        likes: comment.likes.length // Convert comment likes array to count
+      })),
       owner: processUserFields(idea.owner),
       collaborators: idea.collaborators.map(collab => ({
         ...collab,
@@ -434,7 +439,17 @@ router.get("/:id/comments", async (req, res) => {
     include: { author: true, replies: true, likes: true }, // Changed from user to author
     orderBy: { createdAt: "desc" },
   });
-  res.json(comments);
+  
+  // Convert likes arrays to counts for all comments and replies
+  const processComments = (comments: any[]): any[] => {
+    return comments.map(comment => ({
+      ...comment,
+      likes: comment.likes.length,
+      replies: comment.replies ? processComments(comment.replies) : []
+    }));
+  };
+  
+  res.json(processComments(comments));
 });
 
 // Add comment
@@ -455,7 +470,15 @@ authenticatedRouter.post("/:id/comments", async (req: AuthRequest, res) => {
     },
     include: { author: true, replies: true, likes: true }, // Changed from user to author
   });
-  res.status(201).json(comment);
+  
+  // Convert likes array to count
+  const processedComment = {
+    ...comment,
+    likes: comment.likes.length,
+    replies: comment.replies || []
+  };
+  
+  res.status(201).json(processedComment);
 });
 
 // Update like/unlike idea route to match frontend expectations
@@ -490,7 +513,7 @@ authenticatedRouter.post("/:id/likes", async (req: AuthRequest, res) => {
         where: { ideaId: id }
       });
       
-      return res.json({ liked: true, likes: likesCount, like });
+      return res.json({ liked: true, likes: likesCount });
     } else {
       // Delete like if it exists
       const deletedCount = await prisma.like.deleteMany({
