@@ -298,6 +298,11 @@ authenticatedRouter.get("/:id", async (req, res) => {
         // Process role-specific fields for owner and team members
         const processedIdea = {
             ...idea,
+            likes: idea.likes.length, // Convert likes array to count
+            comments: idea.comments.map(comment => ({
+                ...comment,
+                likes: comment.likes.length // Convert comment likes array to count
+            })),
             owner: processUserFields(idea.owner),
             collaborators: idea.collaborators.map(collab => ({
                 ...collab,
@@ -416,7 +421,15 @@ router.get("/:id/comments", async (req, res) => {
         include: { author: true, replies: true, likes: true }, // Changed from user to author
         orderBy: { createdAt: "desc" },
     });
-    res.json(comments);
+    // Convert likes arrays to counts for all comments and replies
+    const processComments = (comments) => {
+        return comments.map(comment => ({
+            ...comment,
+            likes: comment.likes.length,
+            replies: comment.replies ? processComments(comment.replies) : []
+        }));
+    };
+    res.json(processComments(comments));
 });
 // Add comment
 authenticatedRouter.post("/:id/comments", async (req, res) => {
@@ -437,7 +450,13 @@ authenticatedRouter.post("/:id/comments", async (req, res) => {
         },
         include: { author: true, replies: true, likes: true }, // Changed from user to author
     });
-    res.status(201).json(comment);
+    // Convert likes array to count
+    const processedComment = {
+        ...comment,
+        likes: comment.likes.length,
+        replies: comment.replies || []
+    };
+    res.status(201).json(processedComment);
 });
 // Update like/unlike idea route to match frontend expectations
 authenticatedRouter.post("/:id/likes", async (req, res) => {
@@ -447,45 +466,66 @@ authenticatedRouter.post("/:id/likes", async (req, res) => {
     }
     const { id } = req.params;
     const { action } = parseResult.data; // 'like' or 'unlike'
-    if (action === "like") {
-        const like = await prisma_1.default.like.upsert({
-            where: { userId_ideaId: { userId: req.user.id, ideaId: id } },
-            update: {},
-            create: { userId: req.user.id, ideaId: id },
+    try {
+        // Verify the idea exists and is approved
+        const idea = await prisma_1.default.idea.findFirst({
+            where: { id, approved: true }
         });
-        return res.json({ liked: true, like });
+        if (!idea) {
+            return res.status(404).json({ error: "Idea not found or not approved" });
+        }
+        if (action === "like") {
+            // Use upsert to handle duplicate likes gracefully
+            const like = await prisma_1.default.like.upsert({
+                where: { userId_ideaId: { userId: req.user.id, ideaId: id } },
+                update: {}, // No update needed if already exists
+                create: { userId: req.user.id, ideaId: id },
+            });
+            // Get the updated likes count for the idea
+            const likesCount = await prisma_1.default.like.count({
+                where: { ideaId: id }
+            });
+            return res.json({ liked: true, likes: likesCount });
+        }
+        else {
+            // Delete like if it exists
+            const deletedCount = await prisma_1.default.like.deleteMany({
+                where: { userId: req.user.id, ideaId: id },
+            });
+            // Get the updated likes count for the idea
+            const likesCount = await prisma_1.default.like.count({
+                where: { ideaId: id }
+            });
+            return res.json({ liked: false, likes: likesCount });
+        }
     }
-    else {
-        await prisma_1.default.like.deleteMany({
-            where: { userId: req.user.id, ideaId: id },
-        });
-        return res.json({ liked: false });
+    catch (error) {
+        console.error("[Ideas] Error updating like:", error);
+        // Handle unique constraint violations gracefully
+        if (error instanceof Error && error.message.includes('unique constraint')) {
+            return res.status(409).json({ error: "Like already exists" });
+        }
+        return res.status(500).json({ error: "Failed to update like" });
     }
 });
 // Add route to check if user has liked an idea
-router.get("/:id/likes/check", async (req, res) => {
+authenticatedRouter.get("/:id/likes/check", async (req, res) => {
     const { id } = req.params;
-    const userId = req.query.userId;
-    if (!userId) {
-        return res.status(400).json({ error: "userId is required" });
-    }
+    // Use authenticated user from JWT instead of query parameter
     const like = await prisma_1.default.like.findUnique({
-        where: { userId_ideaId: { userId, ideaId: id } },
+        where: { userId_ideaId: { userId: req.user.id, ideaId: id } },
     });
-    res.json({ liked: !!like });
+    res.json({ hasLiked: !!like });
 });
 // Add route to get comments liked by a user
-router.get("/:id/comments/liked", async (req, res) => {
+authenticatedRouter.get("/:id/comments/liked", async (req, res) => {
     const { id } = req.params;
-    const userId = req.query.userId;
-    if (!userId) {
-        return res.status(400).json({ error: "userId is required" });
-    }
+    // Use authenticated user from JWT instead of query parameter
     const likedComments = await prisma_1.default.like.findMany({
-        where: { userId, comment: { ideaId: id } },
+        where: { userId: req.user.id, comment: { ideaId: id } },
         select: { commentId: true },
     });
-    res.json({ likedComments: likedComments.map((lc) => lc.commentId) });
+    res.json({ likedCommentIds: likedComments.map((lc) => lc.commentId) });
 });
 // Add route for liking/unliking a comment
 authenticatedRouter.post("/:id/comments/:commentId/likes", async (req, res) => {
@@ -494,19 +534,49 @@ authenticatedRouter.post("/:id/comments/:commentId/likes", async (req, res) => {
     if (!["like", "unlike"].includes(action)) {
         return res.status(400).json({ error: "Invalid action" });
     }
-    if (action === "like") {
-        await prisma_1.default.like.upsert({
-            where: { userId_commentId: { userId: req.user.id, commentId } },
-            update: {},
-            create: { userId: req.user.id, commentId },
+    try {
+        // Verify the comment exists and belongs to an approved idea
+        const comment = await prisma_1.default.comment.findFirst({
+            where: {
+                id: commentId,
+                idea: { id, approved: true }
+            }
         });
-        return res.json({ liked: true });
+        if (!comment) {
+            return res.status(404).json({ error: "Comment not found or idea not approved" });
+        }
+        if (action === "like") {
+            // Use upsert to handle duplicate likes gracefully
+            const like = await prisma_1.default.like.upsert({
+                where: { userId_commentId: { userId: req.user.id, commentId } },
+                update: {}, // No update needed if already exists
+                create: { userId: req.user.id, commentId },
+            });
+            // Get the updated likes count for the comment
+            const likesCount = await prisma_1.default.like.count({
+                where: { commentId }
+            });
+            return res.json({ liked: true, likes: likesCount });
+        }
+        else {
+            // Delete like if it exists
+            const deletedCount = await prisma_1.default.like.deleteMany({
+                where: { userId: req.user.id, commentId },
+            });
+            // Get the updated likes count for the comment
+            const likesCount = await prisma_1.default.like.count({
+                where: { commentId }
+            });
+            return res.json({ liked: false, likes: likesCount });
+        }
     }
-    else {
-        await prisma_1.default.like.deleteMany({
-            where: { userId: req.user.id, commentId },
-        });
-        return res.json({ liked: false });
+    catch (error) {
+        console.error("[Ideas] Error updating comment like:", error);
+        // Handle unique constraint violations gracefully
+        if (error instanceof Error && error.message.includes('unique constraint')) {
+            return res.status(409).json({ error: "Like already exists" });
+        }
+        return res.status(500).json({ error: "Failed to update comment like" });
     }
 });
 // Get team details for an idea (owner, collaborators, mentors)
