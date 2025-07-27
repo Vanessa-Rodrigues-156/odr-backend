@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@prisma/client");
+const auditLog_1 = require("../lib/auditLog");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const readline = __importStar(require("readline"));
@@ -96,6 +97,16 @@ async function importBackupData() {
                         createdAt: user.createdAt,
                         updatedAt: new Date()
                     }
+                });
+                // Audit log: user upsert
+                await (0, auditLog_1.logAuditEvent)({
+                    action: 'USER_MIGRATION',
+                    userId: user.id,
+                    userRole: user.userRole,
+                    targetId: user.id,
+                    targetType: 'USER',
+                    success: true,
+                    message: `User migrated: ${user.email}`,
                 });
                 // Based on user role, create appropriate type record
                 switch (user.userRole) {
@@ -212,6 +223,15 @@ async function importBackupData() {
             }
             catch (error) {
                 console.error(`Error migrating user ${user.email}:`, error);
+                await (0, auditLog_1.logAuditEvent)({
+                    action: 'USER_MIGRATION',
+                    userId: user.id,
+                    userRole: user.userRole,
+                    targetId: user.id,
+                    targetType: 'USER',
+                    success: false,
+                    message: `Error migrating user: ${user.email} - ${error instanceof Error ? error.message : String(error)}`,
+                });
             }
         }
         console.log("\nData import and migration complete!");

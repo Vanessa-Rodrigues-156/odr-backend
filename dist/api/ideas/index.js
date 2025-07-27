@@ -4,8 +4,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const zod_1 = require("zod");
 const prisma_1 = __importDefault(require("../../lib/prisma"));
 const auth_1 = require("../../middleware/auth");
+const auditLog_1 = require("../../lib/auditLog");
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 // Create separate routers for different auth levels
 const router = (0, express_1.Router)();
 const authenticatedRouter = (0, express_1.Router)();
@@ -32,14 +35,27 @@ const ensureAdmin = (req, res, next) => {
 // Apply authentication middleware to their respective routers
 authenticatedRouter.use(ensureAuthenticated);
 adminRouter.use(ensureAdmin);
+// Rate limiter for form submissions - more reasonable limits
+const formLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: process.env.NODE_ENV === "production" ? 20 : 100, // More lenient in development
+    message: { error: "Too many form submissions, please try again later." },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+        // Skip rate limiting for development
+        return process.env.NODE_ENV !== "production";
+    }
+});
 // --- IDEA SUBMISSION FLOW ---
 // Submit a new idea (goes to IdeaSubmission, not Idea)
 // Protected route - requires authentication
-authenticatedRouter.post("/submit", async (req, res) => {
-    const { title, caption, description, priorOdrExperience } = req.body;
-    if (!title || !description) {
-        return res.status(400).json({ error: "Title and description are required." });
+authenticatedRouter.post("/submit", formLimiter, async (req, res) => {
+    const parseResult = ideaSubmissionSchema.safeParse(req.body);
+    if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
     }
+    const { title, caption, description, priorOdrExperience } = parseResult.data;
     try {
         // Since we've used the ensureAuthenticated middleware, req.user is guaranteed to be defined
         const submission = await prisma_1.default.ideaSubmission.create({
@@ -132,10 +148,11 @@ adminRouter.get("/", async (req, res) => {
 });
 // Create a new idea (for admin only, normal users use /submit)
 adminRouter.post("/", async (req, res) => {
-    const { title, caption, description, ownerId } = req.body;
-    if (!title || !description || !ownerId) {
-        return res.status(400).json({ error: "Title, description, and ownerId are required." });
+    const parseResult = adminIdeaSchema.safeParse(req.body);
+    if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
     }
+    const { title, caption, description, ownerId } = parseResult.data;
     try {
         const idea = await prisma_1.default.idea.create({
             data: {
@@ -196,8 +213,11 @@ router.get("/approved", async (req, res) => {
     }
 });
 // Get idea details (for discussion board, must be approved)
-router.get("/:id", async (req, res) => {
+// Get single idea by ID (requires authentication)
+authenticatedRouter.get("/:id", async (req, res) => {
     try {
+        // Debug: Log the authenticated user
+        console.log("[Ideas/:id] Request from user:", req.user?.email, "Role:", req.user?.userRole);
         const idea = await prisma_1.default.idea.findUnique({
             where: { id: req.params.id, approved: true },
             include: {
@@ -278,6 +298,11 @@ router.get("/:id", async (req, res) => {
         // Process role-specific fields for owner and team members
         const processedIdea = {
             ...idea,
+            likes: idea.likes.length, // Convert likes array to count
+            comments: idea.comments.map(comment => ({
+                ...comment,
+                likes: comment.likes.length // Convert comment likes array to count
+            })),
             owner: processUserFields(idea.owner),
             collaborators: idea.collaborators.map(collab => ({
                 ...collab,
@@ -320,8 +345,33 @@ authenticatedRouter.delete("/:id", async (req, res) => {
     if (idea.ownerId !== req.user.id && req.user.userRole !== "ADMIN") {
         return res.status(403).json({ error: "Not authorized" });
     }
-    await prisma_1.default.idea.delete({ where: { id } });
-    res.json({ success: true });
+    try {
+        await prisma_1.default.idea.delete({ where: { id } });
+        await (0, auditLog_1.logAuditEvent)({
+            action: 'DELETE_IDEA',
+            userId: req.user.id,
+            userRole: req.user.userRole,
+            targetId: id,
+            targetType: 'IDEA',
+            success: true,
+            message: `Idea deleted by user ${req.user.id}`,
+            ipAddress: req.ip,
+        });
+        res.json({ success: true });
+    }
+    catch (error) {
+        await (0, auditLog_1.logAuditEvent)({
+            action: 'DELETE_IDEA',
+            userId: req.user.id,
+            userRole: req.user.userRole,
+            targetId: id,
+            targetType: 'IDEA',
+            success: false,
+            message: error instanceof Error ? error.message : String(error),
+            ipAddress: req.ip,
+        });
+        res.status(500).json({ error: "Failed to delete idea." });
+    }
 });
 // List collaborators
 router.get("/:id/collaborators", async (req, res) => {
@@ -371,14 +421,26 @@ router.get("/:id/comments", async (req, res) => {
         include: { author: true, replies: true, likes: true }, // Changed from user to author
         orderBy: { createdAt: "desc" },
     });
-    res.json(comments);
+    // Convert likes arrays to counts for all comments and replies
+    const processComments = (comments) => {
+        return comments.map(comment => ({
+            ...comment,
+            likes: comment.likes.length,
+            replies: comment.replies ? processComments(comment.replies) : []
+        }));
+    };
+    res.json(processComments(comments));
 });
 // Add comment
 authenticatedRouter.post("/:id/comments", async (req, res) => {
-    const { id } = req.params;
-    const { content, parentId } = req.body;
+    const parseResult = commentSchema.safeParse(req.body);
+    if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
+    }
+    const { content, parentId } = parseResult.data;
     if (!content)
         return res.status(400).json({ error: "Content required" });
+    const { id } = req.params;
     const comment = await prisma_1.default.comment.create({
         data: {
             content,
@@ -388,54 +450,82 @@ authenticatedRouter.post("/:id/comments", async (req, res) => {
         },
         include: { author: true, replies: true, likes: true }, // Changed from user to author
     });
-    res.status(201).json(comment);
+    // Convert likes array to count
+    const processedComment = {
+        ...comment,
+        likes: comment.likes.length,
+        replies: comment.replies || []
+    };
+    res.status(201).json(processedComment);
 });
 // Update like/unlike idea route to match frontend expectations
 authenticatedRouter.post("/:id/likes", async (req, res) => {
+    const parseResult = likeSchema.safeParse(req.body);
+    if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
+    }
     const { id } = req.params;
-    const { action } = req.body; // 'like' or 'unlike'
-    if (!["like", "unlike"].includes(action)) {
-        return res.status(400).json({ error: "Invalid action" });
-    }
-    if (action === "like") {
-        const like = await prisma_1.default.like.upsert({
-            where: { userId_ideaId: { userId: req.user.id, ideaId: id } },
-            update: {},
-            create: { userId: req.user.id, ideaId: id },
+    const { action } = parseResult.data; // 'like' or 'unlike'
+    try {
+        // Verify the idea exists and is approved
+        const idea = await prisma_1.default.idea.findFirst({
+            where: { id, approved: true }
         });
-        return res.json({ liked: true, like });
+        if (!idea) {
+            return res.status(404).json({ error: "Idea not found or not approved" });
+        }
+        if (action === "like") {
+            // Use upsert to handle duplicate likes gracefully
+            const like = await prisma_1.default.like.upsert({
+                where: { userId_ideaId: { userId: req.user.id, ideaId: id } },
+                update: {}, // No update needed if already exists
+                create: { userId: req.user.id, ideaId: id },
+            });
+            // Get the updated likes count for the idea
+            const likesCount = await prisma_1.default.like.count({
+                where: { ideaId: id }
+            });
+            return res.json({ liked: true, likes: likesCount });
+        }
+        else {
+            // Delete like if it exists
+            const deletedCount = await prisma_1.default.like.deleteMany({
+                where: { userId: req.user.id, ideaId: id },
+            });
+            // Get the updated likes count for the idea
+            const likesCount = await prisma_1.default.like.count({
+                where: { ideaId: id }
+            });
+            return res.json({ liked: false, likes: likesCount });
+        }
     }
-    else {
-        await prisma_1.default.like.deleteMany({
-            where: { userId: req.user.id, ideaId: id },
-        });
-        return res.json({ liked: false });
+    catch (error) {
+        console.error("[Ideas] Error updating like:", error);
+        // Handle unique constraint violations gracefully
+        if (error instanceof Error && error.message.includes('unique constraint')) {
+            return res.status(409).json({ error: "Like already exists" });
+        }
+        return res.status(500).json({ error: "Failed to update like" });
     }
 });
 // Add route to check if user has liked an idea
-router.get("/:id/likes/check", async (req, res) => {
+authenticatedRouter.get("/:id/likes/check", async (req, res) => {
     const { id } = req.params;
-    const userId = req.query.userId;
-    if (!userId) {
-        return res.status(400).json({ error: "userId is required" });
-    }
+    // Use authenticated user from JWT instead of query parameter
     const like = await prisma_1.default.like.findUnique({
-        where: { userId_ideaId: { userId, ideaId: id } },
+        where: { userId_ideaId: { userId: req.user.id, ideaId: id } },
     });
-    res.json({ liked: !!like });
+    res.json({ hasLiked: !!like });
 });
 // Add route to get comments liked by a user
-router.get("/:id/comments/liked", async (req, res) => {
+authenticatedRouter.get("/:id/comments/liked", async (req, res) => {
     const { id } = req.params;
-    const userId = req.query.userId;
-    if (!userId) {
-        return res.status(400).json({ error: "userId is required" });
-    }
+    // Use authenticated user from JWT instead of query parameter
     const likedComments = await prisma_1.default.like.findMany({
-        where: { userId, comment: { ideaId: id } },
+        where: { userId: req.user.id, comment: { ideaId: id } },
         select: { commentId: true },
     });
-    res.json({ likedComments: likedComments.map((lc) => lc.commentId) });
+    res.json({ likedCommentIds: likedComments.map((lc) => lc.commentId) });
 });
 // Add route for liking/unliking a comment
 authenticatedRouter.post("/:id/comments/:commentId/likes", async (req, res) => {
@@ -444,19 +534,49 @@ authenticatedRouter.post("/:id/comments/:commentId/likes", async (req, res) => {
     if (!["like", "unlike"].includes(action)) {
         return res.status(400).json({ error: "Invalid action" });
     }
-    if (action === "like") {
-        await prisma_1.default.like.upsert({
-            where: { userId_commentId: { userId: req.user.id, commentId } },
-            update: {},
-            create: { userId: req.user.id, commentId },
+    try {
+        // Verify the comment exists and belongs to an approved idea
+        const comment = await prisma_1.default.comment.findFirst({
+            where: {
+                id: commentId,
+                idea: { id, approved: true }
+            }
         });
-        return res.json({ liked: true });
+        if (!comment) {
+            return res.status(404).json({ error: "Comment not found or idea not approved" });
+        }
+        if (action === "like") {
+            // Use upsert to handle duplicate likes gracefully
+            const like = await prisma_1.default.like.upsert({
+                where: { userId_commentId: { userId: req.user.id, commentId } },
+                update: {}, // No update needed if already exists
+                create: { userId: req.user.id, commentId },
+            });
+            // Get the updated likes count for the comment
+            const likesCount = await prisma_1.default.like.count({
+                where: { commentId }
+            });
+            return res.json({ liked: true, likes: likesCount });
+        }
+        else {
+            // Delete like if it exists
+            const deletedCount = await prisma_1.default.like.deleteMany({
+                where: { userId: req.user.id, commentId },
+            });
+            // Get the updated likes count for the comment
+            const likesCount = await prisma_1.default.like.count({
+                where: { commentId }
+            });
+            return res.json({ liked: false, likes: likesCount });
+        }
     }
-    else {
-        await prisma_1.default.like.deleteMany({
-            where: { userId: req.user.id, commentId },
-        });
-        return res.json({ liked: false });
+    catch (error) {
+        console.error("[Ideas] Error updating comment like:", error);
+        // Handle unique constraint violations gracefully
+        if (error instanceof Error && error.message.includes('unique constraint')) {
+            return res.status(409).json({ error: "Like already exists" });
+        }
+        return res.status(500).json({ error: "Failed to update comment like" });
     }
 });
 // Get team details for an idea (owner, collaborators, mentors)
@@ -617,3 +737,30 @@ function processUserFields(user) {
 router.use("/", authenticatedRouter);
 router.use("/", adminRouter);
 exports.default = router;
+// Helper: Remove script tags and dangerous characters
+function sanitizeString(str) {
+    return str.replace(/<script.*?>.*?<\/script>/gi, "").replace(/[<>]/g, "");
+}
+// Zod schema for idea submission
+const ideaSubmissionSchema = zod_1.z.object({
+    title: zod_1.z.string().min(3).max(200).transform((v) => sanitizeString(v)),
+    caption: zod_1.z.string().max(300).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+    description: zod_1.z.string().min(10).max(2000).transform((v) => sanitizeString(v)),
+    priorOdrExperience: zod_1.z.string().max(500).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+});
+// Zod schema for admin idea creation
+const adminIdeaSchema = zod_1.z.object({
+    title: zod_1.z.string().min(3).max(200).transform((v) => sanitizeString(v)),
+    caption: zod_1.z.string().max(300).optional().nullable().transform((v) => (v ? sanitizeString(v) : v)),
+    description: zod_1.z.string().min(10).max(2000).transform((v) => sanitizeString(v)),
+    ownerId: zod_1.z.string().min(1),
+});
+// Zod schema for comment
+const commentSchema = zod_1.z.object({
+    content: zod_1.z.string().min(1).max(1000).transform((v) => sanitizeString(v)),
+    parentId: zod_1.z.string().optional().nullable(),
+});
+// Zod schema for like/unlike
+const likeSchema = zod_1.z.object({
+    action: zod_1.z.enum(["like", "unlike"]),
+});

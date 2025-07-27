@@ -5,52 +5,40 @@ async function sessionHandler(req, res) {
     console.log("Session check requested");
     if (!req.user) {
         console.log("Session check failed: No authenticated user");
-        return res.status(401).json({
+        const response = {
             authenticated: false,
             error: "Not authenticated"
-        });
+        };
+        return res.status(401).json(response);
     }
-    // Format user data for consistent response
-    // Only include base user properties, role-specific properties should be added by the middleware
-    const user = {
-        id: req.user.id,
-        name: req.user.name,
-        email: req.user.email,
-        userRole: req.user.userRole,
-        contactNumber: req.user.contactNumber,
-        city: req.user.city,
-        country: req.user.country,
-        createdAt: req.user.createdAt,
-        // Include mentor application status flags
-        hasMentorApplication: req.user.hasMentorApplication || false,
-        isMentorApproved: req.user.isMentorApproved || false,
-        mentorRejectionReason: req.user.mentorRejectionReason || null,
-        // Include role-specific properties that may have been attached by the middleware
-        ...(req.user.institution !== undefined && { institution: req.user.institution }),
-        ...(req.user.highestEducation !== undefined && { highestEducation: req.user.highestEducation }),
-        ...(req.user.courseName !== undefined && { courseName: req.user.courseName }),
-        ...(req.user.courseStatus !== undefined && { courseStatus: req.user.courseStatus }),
-        ...(req.user.mentorType !== undefined && { mentorType: req.user.mentorType }),
-        ...(req.user.organization !== undefined && { organization: req.user.organization }),
-        ...(req.user.role !== undefined && { role: req.user.role }),
-        ...(req.user.expertise !== undefined && { expertise: req.user.expertise }),
-        ...(req.user.course !== undefined && { course: req.user.course }),
-        ...(req.user.mentoring !== undefined && { mentoring: req.user.mentoring }),
-        ...(req.user.workplace !== undefined && { workplace: req.user.workplace }),
-        ...(req.user.description !== undefined && { description: req.user.description }),
-    };
-    // Remove the odrLabUsage field as it doesn't exist in the schema anymore
-    // user.odrLabUsage = req.user.odrLabUsage;
+    // Format user data for consistent response - req.user is already properly typed
+    const user = req.user;
     // Log successful session check
     console.log(`Session valid for user: ${user.email} with role: ${user.userRole}`);
-    // Return session data
-    return res.status(200).json({
+    // Calculate if profile completion is needed based on role and available data
+    let needsProfileCompletion = false;
+    if (user.userRole === "INNOVATOR") {
+        needsProfileCompletion = !user.institution || !user.highestEducation;
+    }
+    else if (user.userRole === "MENTOR") {
+        needsProfileCompletion = !user.mentorType || !user.organization;
+    }
+    else if (user.userRole === "FACULTY") {
+        needsProfileCompletion = !user.institution || !user.course;
+    }
+    else if (user.userRole === "OTHER") {
+        needsProfileCompletion = !user.workplace || !user.role;
+    }
+    // Return session data with unified structure
+    const response = {
         authenticated: true,
         user,
+        needsProfileCompletion,
         // If we have jwt payload with expiration, include time remaining
         ...(req.jwtPayload?.exp ? {
             expiresAt: new Date(req.jwtPayload.exp * 1000).toISOString(),
             expiresIn: req.jwtPayload.exp - Math.floor(Date.now() / 1000)
         } : {})
-    });
+    };
+    return res.status(200).json(response);
 }

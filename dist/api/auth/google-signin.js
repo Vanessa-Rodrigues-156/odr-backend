@@ -5,13 +5,23 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = googleSignInHandler;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const zod_1 = require("zod");
 const prisma_1 = __importDefault(require("../../lib/prisma"));
+function sanitizeString(str) {
+    return str.replace(/<script.*?>.*?<\/script>/gi, "").replace(/[<>]/g, "");
+}
+const googleSignInSchema = zod_1.z.object({
+    email: zod_1.z.string().email().max(200).transform((v) => sanitizeString(v)),
+    name: zod_1.z.string().min(2).max(100).transform((v) => sanitizeString(v)),
+});
 async function googleSignInHandler(req, res) {
     try {
-        const { email, name } = req.body;
-        if (!email || !name) {
-            return res.status(400).json({ error: "Email and name are required" });
+        // Validate and sanitize input
+        const parseResult = googleSignInSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
         }
+        const { email, name } = parseResult.data;
         console.log(`Google sign-in attempt for email: ${email}`);
         // Check if user exists with related profiles
         let user = await prisma_1.default.user.findUnique({
@@ -98,7 +108,16 @@ async function googleSignInHandler(req, res) {
                 institution: user.faculty.institution,
             };
         }
-        // Return appropriate response based on profile completion status
+        // Always set JWT as cookie (if profile complete), never send token in response
+        if (token) {
+            res.cookie("access_token", token, {
+                httpOnly: true,
+                secure: true, // Always secure in production
+                sameSite: "none", // Allow cross-origin cookies for production
+                path: "/",
+                maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+            });
+        }
         return res.status(200).json({
             user: {
                 id: user.id,
@@ -112,7 +131,6 @@ async function googleSignInHandler(req, res) {
                 ...roleSpecificData,
             },
             needsProfileCompletion,
-            token,
             message: needsProfileCompletion
                 ? "Profile completion required"
                 : "Sign in successful",

@@ -1,9 +1,19 @@
 import { Router } from "express";
-import { AuthRequest } from "../../middleware/auth";
+import { AuthRequest } from "../../types/auth";
 import prisma from "../../lib/prisma";
 import profileHandler from "./profile";
+import rateLimit from "express-rate-limit";
 
 const router = Router();
+
+// Rate limiter for mentor application (20 requests per 10 minutes)
+const formLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 20,
+  message: { error: "Too many mentor applications, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Profile routes
 router.get("/profile", profileHandler);
@@ -60,7 +70,7 @@ router.get("/stats", async (req: AuthRequest, res) => {
 });
 
 // API endpoint to apply as mentor (for users who were rejected previously)
-router.post("/apply-mentor", async (req: AuthRequest, res) => {
+router.post("/apply-mentor", formLimiter, async (req: AuthRequest, res) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: "Authentication required" });

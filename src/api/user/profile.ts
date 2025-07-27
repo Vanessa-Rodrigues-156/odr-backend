@@ -1,6 +1,43 @@
 import { Request, Response } from "express";
+import { z } from "zod";
 import prisma from "../../lib/prisma";
+import { logAuditEvent } from "../../lib/auditLog";
 import { authenticateJWT } from "../../middleware/auth";
+import rateLimit from "express-rate-limit";
+
+// Helper: Remove script tags and dangerous characters
+function sanitizeString(str: string): string {
+  return str.replace(/<script.*?>.*?<\/script>/gi, "").replace(/[<>]/g, "");
+}
+
+// Zod schema for user profile update
+const profileSchema = z.object({
+  name: z.string().min(2).max(100).transform((v: string) => sanitizeString(v)),
+  imageAvatar: z.string().url().max(300).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  contactNumber: z.string().min(5).max(20).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  country: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  city: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  institution: z.string().max(200).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  organization: z.string().max(200).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  workplace: z.string().max(200).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  role: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  highestEducation: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  courseName: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  courseStatus: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  expertise: z.string().max(200).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  course: z.string().max(100).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+  mentoring: z.union([z.boolean(), z.string()]).optional().nullable(),
+  description: z.string().max(1000).optional().nullable().transform((v: string | null | undefined) => (v ? sanitizeString(v) : v)),
+});
+
+// Rate limiter for profile update (20 requests per 10 minutes)
+const formLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 20,
+  message: { error: "Too many profile update attempts, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // GET /api/user/profile - Get current user profile
 export async function getUserProfile(req: Request, res: Response) {
@@ -34,20 +71,25 @@ export async function getUserProfile(req: Request, res: Response) {
 
 // PUT /api/user/profile - Update user profile
 export async function updateUserProfile(req: Request, res: Response) {
+  let success = false;
+  let message = '';
   try {
     const userId = (req as any).user?.id;
-    
     if (!userId) {
       return res.status(401).json({ error: "User ID not found in request" });
     }
-    
+
+    // Validate and sanitize input
+    const parseResult = profileSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
+    }
     const {
       name,
       imageAvatar,
       contactNumber,
       country,
       city,
-      // Role-specific fields
       institution,
       organization,
       workplace,
@@ -59,7 +101,7 @@ export async function updateUserProfile(req: Request, res: Response) {
       course,
       mentoring,
       description
-    } = req.body;
+    } = parseResult.data;
 
     // Validate required fields
     if (!name) {
@@ -131,6 +173,8 @@ export async function updateUserProfile(req: Request, res: Response) {
       where: { id: userId },
       data: updateData
     });
+    success = true;
+    message = 'Profile updated successfully';
 
     // Update role-specific data based on user's role
     if (existingUser.userRole === 'INNOVATOR') {
@@ -313,11 +357,32 @@ export async function updateUserProfile(req: Request, res: Response) {
       }
     });
 
+    await logAuditEvent({
+      action: 'UPDATE_PROFILE',
+      userId: userId,
+      userRole: existingUser.userRole as any,
+      targetId: userId,
+      targetType: 'USER',
+      success,
+      message,
+      ipAddress: req.ip,
+    });
     res.json({
       message: "Profile updated successfully",
       user: finalUser
     });
   } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+    await logAuditEvent({
+      action: 'UPDATE_PROFILE',
+      userId: (req as any).user?.id,
+      userRole: undefined,
+      targetId: (req as any).user?.id,
+      targetType: 'USER',
+      success: false,
+      message,
+      ipAddress: req.ip,
+    });
     console.error("Error updating user profile:", error);
     res.status(500).json({ error: "Internal server error" });
   }
@@ -325,13 +390,13 @@ export async function updateUserProfile(req: Request, res: Response) {
 
 // Combined handler for the route
 export default async function profileHandler(req: Request, res: Response) {
-  // Authentication is already handled by app.use("/api/user", authenticateJWT, userRoutes);
-  // No need to apply it again here
-
+  if (req.method === 'PUT') {
+    // Apply rate limiter only for PUT (profile update)
+    // @ts-ignore
+    return formLimiter(req, res, () => updateUserProfile(req, res));
+  }
   if (req.method === 'GET') {
     return getUserProfile(req, res);
-  } else if (req.method === 'PUT') {
-    return updateUserProfile(req, res);
   } else {
     res.setHeader('Allow', ['GET', 'PUT']);
     res.status(405).json({ error: `Method ${req.method} not allowed` });

@@ -1,14 +1,25 @@
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
+import { z } from "zod";
 import prisma from "../../lib/prisma";
+
+function sanitizeString(str: string): string {
+  return str.replace(/<script.*?>.*?<\/script>/gi, "").replace(/[<>]/g, "");
+}
+
+const googleSignInSchema = z.object({
+  email: z.string().email().max(200).transform((v: string) => sanitizeString(v)),
+  name: z.string().min(2).max(100).transform((v: string) => sanitizeString(v)),
+});
 
 export default async function googleSignInHandler(req: Request, res: Response) {
   try {
-    const { email, name } = req.body;
-    
-    if (!email || !name) {
-      return res.status(400).json({ error: "Email and name are required" });
+    // Validate and sanitize input
+    const parseResult = googleSignInSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
     }
+    const { email, name } = parseResult.data;
     
     console.log(`Google sign-in attempt for email: ${email}`);
     
@@ -107,7 +118,16 @@ export default async function googleSignInHandler(req: Request, res: Response) {
       };
     }
     
-    // Return appropriate response based on profile completion status
+    // Always set JWT as cookie (if profile complete), never send token in response
+    if (token) {
+      res.cookie("access_token", token, {
+        httpOnly: true,
+        secure: true, // Always secure in production
+        sameSite: "none" as const, // Allow cross-origin cookies for production
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+    }
     return res.status(200).json({
       user: {
         id: user.id,
@@ -121,7 +141,6 @@ export default async function googleSignInHandler(req: Request, res: Response) {
         ...roleSpecificData,
       },
       needsProfileCompletion,
-      token,
       message: needsProfileCompletion 
         ? "Profile completion required" 
         : "Sign in successful",

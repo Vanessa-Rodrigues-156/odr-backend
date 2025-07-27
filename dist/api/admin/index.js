@@ -10,6 +10,7 @@ const users_1 = __importDefault(require("./users"));
 const analytics_1 = __importDefault(require("./analytics"));
 const approve_idea_1 = __importDefault(require("./approve-idea"));
 const approve_mentor_1 = __importDefault(require("./approve-mentor"));
+const auditLog_1 = require("../../lib/auditLog");
 const router = (0, express_1.Router)();
 router.use(auth_1.authenticateJWT);
 // Middleware to check for ADMIN role
@@ -30,17 +31,17 @@ router.get("/ideas/pending", requireAdmin, async (req, res) => {
 });
 // Approve an idea
 router.post("/approve-idea", requireAdmin, async (req, res) => {
+    const { ideaId } = req.body;
+    if (!ideaId)
+        return res.status(400).json({ error: "ideaId required" });
+    let success = false;
+    let message = '';
     try {
-        const { ideaId } = req.body;
-        if (!ideaId)
-            return res.status(400).json({ error: "ideaId required" });
         // Check if this is an ideaSubmission first
         const submission = await prisma_1.default.ideaSubmission.findUnique({
             where: { id: ideaId },
         });
         if (submission) {
-            // This is a submission that needs to be converted to an idea
-            // Only explicitly include fields that we know exist in the database
             const idea = await prisma_1.default.idea.create({
                 data: {
                     title: submission.title,
@@ -48,10 +49,8 @@ router.post("/approve-idea", requireAdmin, async (req, res) => {
                     description: submission.description,
                     approved: true,
                     ownerId: submission.ownerId,
-                    // Note: don't include 'featured' as it may not exist in the database yet
                 }
             });
-            // Update the submission to mark it as reviewed and approved
             await prisma_1.default.ideaSubmission.update({
                 where: { id: ideaId },
                 data: {
@@ -61,27 +60,67 @@ router.post("/approve-idea", requireAdmin, async (req, res) => {
                     reviewedBy: req.user?.id,
                 }
             });
+            success = true;
+            message = 'Idea submission approved and idea created.';
+            await (0, auditLog_1.logAuditEvent)({
+                action: 'APPROVE_IDEA',
+                userId: req.user?.id,
+                userRole: req.user?.userRole,
+                targetId: ideaId,
+                targetType: 'IDEA_SUBMISSION',
+                success,
+                message,
+                ipAddress: req.ip,
+            });
             return res.json({ success: true, idea });
         }
-        // If it's not a submission, check if it's an existing idea
         const existingIdea = await prisma_1.default.idea.findUnique({
             where: { id: ideaId },
         });
         if (!existingIdea) {
-            return res.status(404).json({
-                error: "Idea not found. The ID may be invalid or the submission may have been deleted."
+            message = 'Idea not found. The ID may be invalid or the submission may have been deleted.';
+            await (0, auditLog_1.logAuditEvent)({
+                action: 'APPROVE_IDEA',
+                userId: req.user?.id,
+                userRole: req.user?.userRole,
+                targetId: ideaId,
+                targetType: 'IDEA',
+                success: false,
+                message,
+                ipAddress: req.ip,
             });
+            return res.status(404).json({ error: message });
         }
-        // If it is an existing idea, update its approved status
         await prisma_1.default.idea.update({
             where: { id: ideaId },
             data: { approved: true }
         });
+        success = true;
+        message = 'Existing idea approved.';
+        await (0, auditLog_1.logAuditEvent)({
+            action: 'APPROVE_IDEA',
+            userId: req.user?.id,
+            userRole: req.user?.userRole,
+            targetId: ideaId,
+            targetType: 'IDEA',
+            success,
+            message,
+            ipAddress: req.ip,
+        });
         res.json({ success: true });
     }
     catch (error) {
-        console.error("Error approving idea:", error);
-        // Provide more specific error message for schema mismatches
+        message = error instanceof Error ? error.message : String(error);
+        await (0, auditLog_1.logAuditEvent)({
+            action: 'APPROVE_IDEA',
+            userId: req.user?.id,
+            userRole: req.user?.userRole,
+            targetId: ideaId,
+            targetType: 'IDEA',
+            success: false,
+            message,
+            ipAddress: req.ip,
+        });
         if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2022') {
             const prismaError = error;
             return res.status(500).json({
@@ -89,7 +128,7 @@ router.post("/approve-idea", requireAdmin, async (req, res) => {
                 details: prismaError.message
             });
         }
-        res.status(500).json({ error: "Failed to approve idea. Please try again.", details: error instanceof Error ? error.message : String(error) });
+        res.status(500).json({ error: "Failed to approve idea. Please try again.", details: message });
     }
 });
 // Reject (delete) an idea
@@ -97,13 +136,13 @@ router.post("/reject-idea", requireAdmin, async (req, res) => {
     const { ideaId } = req.body;
     if (!ideaId)
         return res.status(400).json({ error: "ideaId required" });
+    let success = false;
+    let message = '';
     try {
-        // Check if this is a submission first
         const submission = await prisma_1.default.ideaSubmission.findUnique({
             where: { id: ideaId },
         });
         if (submission) {
-            // Update the submission to mark it as reviewed but not approved
             await prisma_1.default.ideaSubmission.update({
                 where: { id: ideaId },
                 data: {
@@ -113,14 +152,47 @@ router.post("/reject-idea", requireAdmin, async (req, res) => {
                     reviewedBy: req.user?.id,
                 }
             });
+            success = true;
+            message = 'Idea submission rejected.';
+            await (0, auditLog_1.logAuditEvent)({
+                action: 'REJECT_IDEA',
+                userId: req.user?.id,
+                userRole: req.user?.userRole,
+                targetId: ideaId,
+                targetType: 'IDEA_SUBMISSION',
+                success,
+                message,
+                ipAddress: req.ip,
+            });
             return res.json({ success: true });
         }
-        // If not a submission, try to delete the idea
         await prisma_1.default.idea.delete({ where: { id: ideaId } });
+        success = true;
+        message = 'Idea deleted.';
+        await (0, auditLog_1.logAuditEvent)({
+            action: 'REJECT_IDEA',
+            userId: req.user?.id,
+            userRole: req.user?.userRole,
+            targetId: ideaId,
+            targetType: 'IDEA',
+            success,
+            message,
+            ipAddress: req.ip,
+        });
         res.json({ success: true });
     }
     catch (error) {
-        console.error("Error rejecting idea:", error);
+        message = error instanceof Error ? error.message : String(error);
+        await (0, auditLog_1.logAuditEvent)({
+            action: 'REJECT_IDEA',
+            userId: req.user?.id,
+            userRole: req.user?.userRole,
+            targetId: ideaId,
+            targetType: 'IDEA',
+            success: false,
+            message,
+            ipAddress: req.ip,
+        });
         res.status(500).json({ error: "Failed to reject idea. Please try again." });
     }
 });
