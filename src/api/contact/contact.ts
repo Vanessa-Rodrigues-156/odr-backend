@@ -35,30 +35,37 @@ router.post("/", csrfProtection, async (req: Request, res: Response) => {
 
     // Log for debugging CSRF issues
     console.log("CSRF token received:", req.headers["x-csrf-token"]);
-    //console.log("Expected CSRF token:", req.csrfToken());
-    
-    try {
-      // Append to Google Sheet via Apps Script
-      await fetch("https://script.google.com/macros/s/AKfycbwcj6v7EHfuAT5Co4yYtnmuwiK2jLnyRL7l1LKZhXIle_6pHrj-FrZANFr__aYhHp2n/exec", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email,  message }),
-      });
-      console.log(name, email, message);
-      res.status(200).json({ success: true });
-    } catch (error) {
-      console.error("Contact error:", error);
-      if (error && typeof error === 'object' && 'code' in error && (error as any).code === 'EBADCSRFTOKEN') {
-        console.error("CSRF token mismatch");
-        return res.status(403).json({ error: "Your session has expired or the request was blocked for security reasons. Please refresh and try again." });
-      }
-      res.status(500).json({ error: "Failed to send message." });
+    if (typeof req.csrfToken === 'function') {
+      console.log("Expected CSRF token:", req.csrfToken());
+    } else {
+      console.log("CSRF token function not available");
     }
+    
+    // Append to Google Sheet via Apps Script
+    const response = await fetch("https://script.google.com/macros/s/AKfycbwcj6v7EHfuAT5Co4yYtnmuwiK2jLnyRL7l1LKZhXIle_6pHrj-FrZANFr__aYhHp2n/exec", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email, message }),
+    });
+    
+    if (!response.ok) {
+      console.error("Google Sheet API error:", await response.text());
+      return res.status(500).json({ error: "Failed to send message." });
+    }
+    
+    console.log("Contact form submission:", name, email, message);
+    res.status(200).json({ 
+      success: true,
+      message: "Your message has been sent successfully!"
+    });
   } catch (error) {
     console.error("Contact error:", error);
     if (error && typeof error === 'object' && 'code' in error && (error as any).code === 'EBADCSRFTOKEN') {
       console.error("CSRF token mismatch");
-      return res.status(403).json({ error: "Your session has expired or the request was blocked for security reasons. Please refresh and try again." });
+      return res.status(403).json({ 
+        error: "Your session has expired or the request was blocked for security reasons. Please refresh and try again.",
+        csrfError: true
+      });
     }
     res.status(500).json({ error: "Failed to send message." });
   }
