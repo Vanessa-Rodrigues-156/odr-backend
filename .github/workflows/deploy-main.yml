@@ -14,8 +14,10 @@ jobs:
 
     - name: Write .env.development from GitHub Secret
       run: |
+        echo "Creating .env.development and .env.production files from GitHub secrets"
+        touch .env.production
         echo "${{ secrets.ENV_FILE }}" > .env.development
-        echo "${{secrets.ENV_File}}"> .env.production
+        echo "${{ secrets.ENV_FILE }}" > .env.production
         echo ".env.development created with $(wc -l < .env.development) lines"
 
     - name: Install Bun

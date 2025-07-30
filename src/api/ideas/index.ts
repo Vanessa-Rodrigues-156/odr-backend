@@ -5,6 +5,7 @@ import { authenticateJWT } from "../../middleware/auth";
 import { AuthRequest } from "../../types/auth";
 import { logAuditEvent } from "../../lib/auditLog";
 import rateLimit from "express-rate-limit";
+import { FullComment } from "../../types/comments";
 
 // Create separate routers for different auth levels
 const router = Router();
@@ -436,20 +437,54 @@ router.get("/:id/comments", async (req, res) => {
   const { id } = req.params;
   const comments = await prisma.comment.findMany({
     where: { ideaId: id },
-    include: { author: true, replies: true, likes: true }, // Changed from user to author
+    include: { 
+      author: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          imageAvatar: true,
+          userRole: true,
+          country: true,
+          city: true,
+        }
+      }, 
+      replies: {
+        include: {
+          author: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              imageAvatar: true,
+              userRole: true,
+              country: true,
+              city: true,
+            }
+          },
+          likes: true
+        }
+      },
+      likes: true 
+    },
     orderBy: { createdAt: "desc" },
   });
   
-  // Convert likes arrays to counts for all comments and replies
-  const processComments = (comments: any[]): any[] => {
-    return comments.map(comment => ({
+  // Add consistent mapping from author to user field
+  const mappedComments = comments.map(comment => {
+    return {
       ...comment,
-      likes: comment.likes.length,
-      replies: comment.replies ? processComments(comment.replies) : []
-    }));
-  };
+      user: comment.author as any,  // Map author to user for frontend consistency
+      replies: comment.replies ? comment.replies.map(reply => ({
+        ...reply,
+        user: (reply as any).author,  // Map author to user for replies
+        likes: reply.likes ? reply.likes.length : 0  // Convert reply likes to count
+      })) : []
+    };
+  });
   
-  res.json(processComments(comments));
+  // Process the mapped comments
+  res.json(processComments(mappedComments));
 });
 
 // Add comment
@@ -465,24 +500,29 @@ authenticatedRouter.post("/:id/comments", async (req: AuthRequest, res) => {
     data: {
       content,
       ideaId: id,
-      authorId: req.user!.id, // Changed from userId to authorId
+      authorId: req.user!.id,
       parentId: parentId || null,
     },
-    include: { author: true, replies: true, likes: true }, // Changed from user to author
+    include: { author: true, replies: true, likes: true },
   });
   
-  // Convert likes array to count
+  // Convert likes array to count and map author to user
+  // Use type assertion to tell TypeScript that author exists due to the include
   const processedComment = {
     ...comment,
+    user: comment.author as any, // Use type assertion to avoid TypeScript error
     likes: comment.likes.length,
-    replies: comment.replies || []
+    replies: comment.replies ? comment.replies.map(reply => ({
+      ...reply,
+      user: (reply as any).author // Also use type assertion for replies
+    })) : []
   };
   
   res.status(201).json(processedComment);
 });
 
 // Update like/unlike idea route to match frontend expectations
-authenticatedRouter.post("/:id/likes", async (req: AuthRequest, res) => {
+authenticatedRouter.post("/:id/likes", async (req: AuthRequest, res: Response) => {
   const parseResult = likeSchema.safeParse(req.body);
   if (!parseResult.success) {
     return res.status(400).json({ error: "Invalid input", details: parseResult.error.flatten() });
@@ -826,3 +866,106 @@ const commentSchema = z.object({
 const likeSchema = z.object({
   action: z.enum(["like", "unlike"]),
 });
+
+// Helper function to process comments recursively with improved typing for replies
+function processComments(comments: any[]): FullComment[] {
+  // Basic array check
+  if (!comments || !Array.isArray(comments)) {
+    return [];
+  }
+  
+  try {
+    // Map each comment with proper null handling
+    return comments
+      .filter(comment => comment !== null && comment !== undefined)
+      .map(comment => {
+        try {
+          // Always map author to user for frontend consistency
+          // Fix: Check if author exists before accessing, or use authorId to create a minimal user object
+          if (comment.author) {
+            comment.user = comment.author;
+          } else if (comment.authorId && !comment.user) {
+            // If author relation wasn't included, create minimal user object from authorId
+            comment.user = {
+              id: comment.authorId,
+              name: "Unknown User"
+            };
+          }
+          
+          // Safely get likes count with defensive coding
+          const likesCount = 
+            comment && 
+            comment.likes && 
+            Array.isArray(comment.likes) ? 
+            comment.likes.length : 0;
+          
+          // Safely process replies with defensive coding
+          let processedReplies: any[] = [];
+          
+          if (comment && comment.replies) {
+            if (Array.isArray(comment.replies)) {
+              // Type each reply explicitly when mapping
+              processedReplies = comment.replies
+                .filter((reply: any) => reply !== null && reply !== undefined)
+                .map((reply: any) => {
+                  try {
+                    // Fix: Check if author exists before accessing, or use authorId to create a minimal user object
+                    if (reply.author) {
+                      reply.user = reply.author;
+                    } else if (reply.authorId && !reply.user) {
+                      // If author relation wasn't included, create minimal user object from authorId
+                      reply.user = {
+                        id: reply.authorId,
+                        name: "Unknown User"
+                      };
+                    }
+                    
+                    // Handle reply likes - ensure likes exists and is an array
+                    const replyLikes = reply.likes || [];
+                    const replyLikesCount = Array.isArray(replyLikes) ? replyLikes.length : 0;
+                    
+                    // Default empty arrays for missing properties
+                    reply.subReplies = reply.subReplies || [];
+                    
+                    // Process sub-replies only if they exist and are an array
+                    const subReplies = Array.isArray(reply.subReplies) ? 
+                      processComments(reply.subReplies) : [];
+                    
+                    // Return processed reply with explicit defaults
+                    return {
+                      ...reply,
+                      likes: replyLikesCount,
+                      replies: reply.replies || [], // Ensure replies is always an array
+                      subReplies: subReplies
+                    };
+                  } catch (replyError) {
+                    console.error("[processComments] Error processing reply:", replyError);
+                    // Return a safe version of the reply with default values
+                    return { 
+                      ...reply, 
+                      likes: 0, 
+                      replies: [], 
+                      subReplies: [] 
+                    };
+                  }
+                });
+            }
+          }
+          
+          // Return processed comment with safe defaults
+          return {
+            ...comment,
+            likes: likesCount,
+            replies: processedReplies
+          };
+        } catch (commentError) {
+          console.error("[processComments] Error processing comment:", commentError);
+          return { ...comment, likes: 0, replies: [] };
+        }
+      });
+  } catch (error) {
+    console.error("[processComments] Fatal error:", error);
+    return [];
+  }
+}
+
